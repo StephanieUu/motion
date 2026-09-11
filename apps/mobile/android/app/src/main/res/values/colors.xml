@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="colorPrimary">#91AA98</color>
+    <color name="colorPrimaryDark">#536D5A</color>
+    <color name="colorAccent">#E95C40</color>
+    <color name="motionCanvas">#F7F9F7</color>
+    <color name="motionInk">#252525</color>
+</resources>

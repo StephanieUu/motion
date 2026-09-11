@@ -1,0 +1,19 @@
+{
+  "name": "motion",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@12.3.4",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "corepack pnpm --filter @motion/mobile dev",
+    "build": "corepack pnpm --filter @motion/mobile build",
+    "typecheck": "corepack pnpm --filter @motion/mobile typecheck",
+    "lint": "corepack pnpm --filter @motion/mobile lint",
+    "test": "corepack pnpm --filter @motion/mobile test",
+    "validate": "corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test && corepack pnpm build",
+    "cap:sync": "corepack pnpm --filter @motion/mobile cap:sync",
+    "android:open": "corepack pnpm --filter @motion/mobile android:open"
+  }
+}

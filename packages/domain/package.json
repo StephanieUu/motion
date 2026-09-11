@@ -1,0 +1,6 @@
+{
+  "name": "@motion/domain",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Reserved for platform-neutral domain logic beginning after M0."
+}

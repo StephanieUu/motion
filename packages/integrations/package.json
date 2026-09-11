@@ -1,0 +1,6 @@
+{
+  "name": "@motion/integrations",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Reserved for integration adapters beginning after M0."
+}

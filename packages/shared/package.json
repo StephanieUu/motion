@@ -1,0 +1,6 @@
+{
+  "name": "@motion/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Reserved for shared contracts and utilities beginning after M0."
+}

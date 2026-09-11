@@ -1,0 +1,6 @@
+{
+  "name": "@motion/api",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Empty API workspace reserved by the accepted architecture; no M0 runtime."
+}
