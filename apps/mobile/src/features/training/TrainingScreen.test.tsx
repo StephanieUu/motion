@@ -37,8 +37,9 @@ function workout(id: string, changes: Partial<LibraryWorkout> = {}): LibraryWork
 
 function fakeLibrary(initial: LibraryWorkout[] = []) {
   let entries = [...initial]
+  let pendingTodayWorkoutId: string | null = null
   const library: TrainingLibrary = {
-    load: async () => ({ workouts: [...entries], activityTypes: [{
+    load: async () => ({ workouts: [...entries], pendingTodayWorkoutId, activityTypes: [{
       id: 'yoga', system_key: 'YOGA', name: '瑜伽', is_active: 1, is_system: 1,
     }] }),
     addUrl: async (url) => {
@@ -62,11 +63,89 @@ function fakeLibrary(initial: LibraryWorkout[] = []) {
     setVisibility: async (id, visibility) => { entries = entries.map((entry) => entry.id === id
       ? { ...entry, userVisibility: visibility } : entry) },
     remove: async (id) => { entries = entries.filter((entry) => entry.id !== id); return 'deleted' },
+    importShare: async () => { throw new Error('Unexpected import') },
+    selectToday: async (id) => { pendingTodayWorkoutId = id },
   }
   return library
 }
 
 describe('M2 Training screen', () => {
+  it('offers today selection for manual URL and Free Activity workouts', async () => {
+    const user = userEvent.setup()
+    render(<TrainingScreen library={fakeLibrary()} />)
+    await screen.findByRole('heading', { name: uiCopy.training.title })
+
+    await user.click(screen.getByRole('button', { name: uiCopy.training.add }))
+    await user.type(screen.getByLabelText(uiCopy.training.urlField), 'https://www.bilibili.com/video/BV123')
+    await user.click(screen.getByRole('button', { name: uiCopy.training.save }))
+    expect(await screen.findByRole('button', { name: uiCopy.training.import.selectToday })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: uiCopy.training.import.selectToday }))
+    expect(await screen.findByText(uiCopy.training.import.todaySelected)).toBeVisible()
+    expect(screen.queryByRole('button', { name: uiCopy.training.import.selectToday })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: uiCopy.training.back }))
+    await user.click(screen.getByRole('button', { name: uiCopy.training.add }))
+    await user.click(screen.getByRole('button', { name: uiCopy.training.addFree }))
+    await user.type(screen.getByLabelText(uiCopy.training.freeActivityName), '快走')
+    await user.click(screen.getByRole('button', { name: uiCopy.training.save }))
+    expect(await screen.findByRole('button', { name: uiCopy.training.import.selectToday })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: uiCopy.training.import.selectToday }))
+    expect(await screen.findByText(uiCopy.training.import.todaySelected)).toBeVisible()
+    await user.click(screen.getByRole('button', { name: uiCopy.training.back }))
+    await user.click(screen.getByRole('button', { name: /B站训练/ }))
+    expect(screen.getByRole('button', { name: uiCopy.training.import.selectToday })).toBeVisible()
+  })
+
+  it('allows existing and temporarily hidden workouts, but not archived workouts', async () => {
+    const user = userEvent.setup()
+    render(<TrainingScreen library={fakeLibrary([
+      workout('existing', { title: '原有训练' }),
+      workout('hidden', { title: '隐藏训练', userVisibility: 'TEMPORARILY_HIDDEN' }),
+      workout('archived', { title: '归档训练', userVisibility: 'ARCHIVED' }),
+    ])} />)
+    await screen.findByRole('heading', { name: uiCopy.training.title })
+    await user.click(screen.getByRole('button', { name: /原有训练/ }))
+    expect(screen.getByRole('button', { name: uiCopy.training.import.selectToday })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: uiCopy.training.import.selectToday }))
+    expect(await screen.findByText(uiCopy.training.import.todaySelected)).toBeVisible()
+    await user.click(screen.getByRole('button', { name: uiCopy.training.back }))
+
+    await user.click(screen.getByRole('button', { name: uiCopy.training.hiddenWorkouts }))
+    await user.click(screen.getByRole('button', { name: /隐藏训练/ }))
+    expect(screen.getByRole('button', { name: uiCopy.training.unhide })).toBeVisible()
+    expect(screen.getByRole('button', { name: uiCopy.training.import.selectToday })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: uiCopy.training.import.selectToday }))
+    expect(await screen.findByText(uiCopy.training.import.todaySelected)).toBeVisible()
+    await user.click(screen.getByRole('button', { name: uiCopy.training.back }))
+
+    await user.click(screen.getByRole('button', { name: uiCopy.training.archivedWorkouts }))
+    await user.click(screen.getByRole('button', { name: /归档训练/ }))
+    expect(screen.queryByRole('button', { name: uiCopy.training.import.selectToday })).not.toBeInTheDocument()
+    expect(screen.queryByText(uiCopy.training.import.todaySelected)).not.toBeInTheDocument()
+  })
+
+  it('shows an incomplete import and saves today selection without entering a session flow', async () => {
+    const user = userEvent.setup()
+    const imported = workout('shared', { sourceType: 'QUARK', sourceUrl: 'https://pan.quark.cn/s/abc' })
+    render(<TrainingScreen library={fakeLibrary([imported])} importResult={{
+      eventId: 'share-event', workoutContentId: 'shared', status: 'NEEDS_MORE_INFO',
+    }} />)
+    expect(await screen.findByText(uiCopy.training.import.savedIncomplete)).toBeVisible()
+    expect(screen.getByRole('button', { name: uiCopy.training.import.selectToday })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: uiCopy.training.import.selectToday }))
+    expect(await screen.findAllByText(uiCopy.training.import.todaySelected)).not.toHaveLength(0)
+    expect(screen.queryByRole('button', { name: uiCopy.today.startWorkout })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: uiCopy.training.back }))
+    expect(screen.getByRole('button', { name: /夸克训练/ })).toHaveTextContent(uiCopy.training.import.todaySelected)
+  })
+
+  it('keeps incomplete messaging when core metadata is ready but optional details are missing', async () => {
+    render(<TrainingScreen library={fakeLibrary([workout('ready', { title: '20分钟瑜伽',
+      durationMinutes: 20, primaryActivityTypeId: 'yoga', activityTypeName: '瑜伽' })])}
+      importResult={{ eventId: 'ready-event', workoutContentId: 'ready', status: 'READY' }} />)
+    expect(await screen.findByText(uiCopy.training.import.savedIncomplete)).toBeVisible()
+  })
+
   it('returns from add and detail to the filtered library, and from edit to detail', async () => {
     const user = userEvent.setup()
     render(<TrainingScreen library={fakeLibrary([

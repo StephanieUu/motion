@@ -133,6 +133,12 @@ export const zhCN = {
     saveError: '保存失败，请重试',
     nativeOnly: '当前环境无法打开训练库',
     retry: '重试',
+    import: {
+      saved: '已存入训练库',
+      savedIncomplete: '信息待补充，已存入训练库',
+      selectToday: '今天做这个',
+      todaySelected: '已选为今日训练',
+    },
   },
   placeholders: {
     training: {

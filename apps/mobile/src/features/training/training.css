@@ -231,6 +231,16 @@
   font-weight: 700;
 }
 
+.training-library__pending-chip {
+  justify-self: start;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-green-soft);
+  color: var(--color-green-deep);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .training-library__card strong {
   max-width: 90%;
   overflow-wrap: anywhere;
@@ -453,6 +463,24 @@
 
 .training-library__actions .training-library__danger {
   color: var(--color-coral);
+}
+
+.training-library__actions .training-library__today-action {
+  border-color: var(--color-green-deep);
+  background: var(--color-green-soft);
+  color: var(--color-green-deep);
+}
+
+.training-library__today-selected {
+  min-height: 2.8rem;
+  display: grid;
+  place-items: center;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-green-deep);
+  border-radius: var(--radius-sm);
+  background: var(--color-green-soft);
+  color: var(--color-green-deep);
+  font-weight: 700;
 }
 
 .training-library__confirm {

@@ -4,10 +4,14 @@ import { ActivityRepository, type ActivityType } from '../../db/repositories/Act
 import { WorkoutRepository, type LibraryWorkout, type NewWorkout } from '../../db/repositories/WorkoutRepository'
 import { getNativeDatabase } from '../../db/sqlite/nativeDatabase'
 import type { Database } from '../../db/sqlite/Database'
+import { WorkoutImportRepository, type WorkoutImportResult } from '../../db/repositories/WorkoutImportRepository'
+import { localDateAtStart } from '@motion/domain'
+import type { SharedWorkoutPayload } from '@motion/integrations'
 
 export interface LibrarySnapshot {
   workouts: LibraryWorkout[]
   activityTypes: ActivityType[]
+  pendingTodayWorkoutId: string | null
 }
 
 export interface WorkoutDetailsChange {
@@ -26,6 +30,8 @@ export interface TrainingLibrary {
   setPreference(id: string, preference: WorkoutPreference | null): Promise<void>
   setVisibility(id: string, visibility: Extract<WorkoutVisibility, 'ACTIVE' | 'TEMPORARILY_HIDDEN'>): Promise<void>
   remove(id: string): Promise<'deleted' | 'archived'>
+  importShare(payload: SharedWorkoutPayload): Promise<WorkoutImportResult>
+  selectToday(id: string): Promise<void>
 }
 
 export class InvalidWorkoutUrlError extends Error {
@@ -63,17 +69,20 @@ export function sourceTypeFromUrl(url: URL): SourceType {
 export class SqliteTrainingLibrary implements TrainingLibrary {
   private readonly workouts: WorkoutRepository
   private readonly activities: ActivityRepository
+  private readonly imports: WorkoutImportRepository
 
   constructor(db: Database) {
     this.workouts = new WorkoutRepository(db)
     this.activities = new ActivityRepository(db)
+    this.imports = new WorkoutImportRepository(db)
   }
 
   async load(): Promise<LibrarySnapshot> {
-    const [workouts, activityTypes] = await Promise.all([
+    const [workouts, activityTypes, pendingTodayWorkoutId] = await Promise.all([
       this.workouts.listLibrary(), this.activities.listTypes(),
+      this.imports.pendingToday(localDateAtStart(new Date())),
     ])
-    return { workouts, activityTypes }
+    return { workouts, activityTypes, pendingTodayWorkoutId }
   }
 
   async addUrl(input: string): Promise<LibraryWorkout> {
@@ -122,6 +131,14 @@ export class SqliteTrainingLibrary implements TrainingLibrary {
 
   remove(id: string): Promise<'deleted' | 'archived'> {
     return this.workouts.remove(id)
+  }
+
+  importShare(payload: SharedWorkoutPayload): Promise<WorkoutImportResult> {
+    return this.imports.importShare(payload)
+  }
+
+  selectToday(id: string): Promise<void> {
+    return this.imports.selectToday(id, localDateAtStart(new Date()))
   }
 }
 

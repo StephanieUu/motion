@@ -157,10 +157,11 @@ export class WorkoutRepository {
         (SELECT COUNT(*) FROM training_sessions WHERE workout_content_id=?) +
         (SELECT COUNT(*) FROM mini_routine_versions WHERE workout_content_id=?) +
         (SELECT COUNT(*) FROM workout_imports WHERE workout_content_id=?) +
+        (SELECT COUNT(*) FROM today_pending_selections WHERE workout_content_id=?) +
         (SELECT COUNT(*) FROM content_analyses WHERE workout_content_id=?) +
         (SELECT COUNT(*) FROM daily_recommendations WHERE selected_workout_content_id=?) +
         (SELECT COUNT(*) FROM exploration_recommendations WHERE resulting_workout_content_id=?)) AS used`,
-      Array(7).fill(id))
+      Array(8).fill(id))
       if ((referenced[0]?.used ?? 0) > 0) {
         await tx.run("UPDATE workout_contents SET user_visibility='ARCHIVED', updated_at=? WHERE id=?", [new Date().toISOString(), id])
         return 'archived'

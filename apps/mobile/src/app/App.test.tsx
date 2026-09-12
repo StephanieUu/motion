@@ -7,13 +7,15 @@ import { App } from './App'
 import type { TrainingLibrary } from '../features/training/trainingLibrary'
 
 const emptyLibrary: TrainingLibrary = {
-  load: async () => ({ workouts: [], activityTypes: [] }),
+  load: async () => ({ workouts: [], activityTypes: [], pendingTodayWorkoutId: null }),
   addUrl: async () => { throw new Error('Unexpected add') },
   addFreeActivity: async () => { throw new Error('Unexpected add') },
   update: async () => { throw new Error('Unexpected update') },
   setPreference: async () => { throw new Error('Unexpected preference change') },
   setVisibility: async () => { throw new Error('Unexpected visibility change') },
   remove: async () => { throw new Error('Unexpected remove') },
+  importShare: async () => { throw new Error('Unexpected import') },
+  selectToday: async () => { throw new Error('Unexpected selection') },
 }
 
 describe('M0 application shell', () => {

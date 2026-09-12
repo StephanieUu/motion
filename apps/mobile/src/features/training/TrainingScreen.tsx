@@ -4,6 +4,7 @@ import { Capacitor, type PluginListenerHandle } from '@capacitor/core'
 import type { SourceType, WorkoutPreference, WorkoutVisibility } from '@motion/domain'
 import { logger } from '../../app/logger'
 import type { LibraryWorkout } from '../../db/repositories/WorkoutRepository'
+import type { WorkoutImportResult } from '../../db/repositories/WorkoutImportRepository'
 import { uiCopy } from '../../locales'
 import { defaultLibraryFilters, displayWorkoutTitle, filterLibrary, workoutTags,
   type DurationFilter, type HistoryFilter, type LibraryFilters, type PreferenceFilter } from './libraryModel'
@@ -11,7 +12,11 @@ import { InvalidWorkoutUrlError, openTrainingLibrary, TrainingLibraryUnavailable
   type LibrarySnapshot, type TrainingLibrary } from './trainingLibrary'
 import './training.css'
 
-interface TrainingScreenProps { library?: TrainingLibrary | undefined }
+interface TrainingScreenProps {
+  library?: TrainingLibrary | undefined
+  importResult?: WorkoutImportResult | null
+  onImportResultDismiss?: () => void
+}
 type ScreenMode = 'LIST' | 'DETAIL' | 'ADD_URL' | 'ADD_FREE' | 'EDIT'
 
 function TrainingBackButton({ label, onClick }: { label: string; onClick: () => void }) {
@@ -52,7 +57,7 @@ function safeSourceUrl(value: string | null): string | null {
   } catch { return null }
 }
 
-export function TrainingScreen({ library: suppliedLibrary }: TrainingScreenProps) {
+export function TrainingScreen({ library: suppliedLibrary, importResult, onImportResultDismiss }: TrainingScreenProps) {
   const [library, setLibrary] = useState<TrainingLibrary | null>(suppliedLibrary ?? null)
   const [snapshot, setSnapshot] = useState<LibrarySnapshot | null>(null)
   const [loading, setLoading] = useState(true)
@@ -71,14 +76,20 @@ export function TrainingScreen({ library: suppliedLibrary }: TrainingScreenProps
   const [editActivityTypeId, setEditActivityTypeId] = useState('')
   const [editIntensity, setEditIntensity] = useState('')
   const [confirmRemove, setConfirmRemove] = useState(false)
+  const [activeImport, setActiveImport] = useState<WorkoutImportResult | null>(null)
+  const handledImportId = useRef<string | null>(null)
   const listScrollY = useRef(0)
 
   const goBack = useCallback(() => {
-    setMode((current) => current === 'EDIT' ? 'DETAIL' : 'LIST')
+    setMode(mode === 'EDIT' ? 'DETAIL' : 'LIST')
+    if (mode === 'DETAIL') {
+      setActiveImport(null)
+      onImportResultDismiss?.()
+    }
     setError('')
     setNotice('')
     setConfirmRemove(false)
-  }, [])
+  }, [mode, onImportResultDismiss])
 
   useLayoutEffect(() => {
     const scrollRoot = document.scrollingElement ?? document.documentElement
@@ -127,6 +138,22 @@ export function TrainingScreen({ library: suppliedLibrary }: TrainingScreenProps
     })()
     return () => { active = false }
   }, [suppliedLibrary])
+
+  useEffect(() => {
+    if (!library || !importResult || handledImportId.current === importResult.eventId) return
+    let active = true
+    void library.load().then((data) => {
+      if (!active) return
+      handledImportId.current = importResult.eventId
+      setSnapshot(data)
+      setSelectedId(importResult.workoutContentId)
+      setActiveImport(importResult)
+      setMode('DETAIL')
+      setError('')
+      setNotice('')
+    }).catch((cause: unknown) => logger.error('Imported workout load failed', cause))
+    return () => { active = false }
+  }, [library, importResult])
 
   const selected = snapshot?.workouts.find((item) => item.id === selectedId) ?? null
   const visible = useMemo(() => filterLibrary(snapshot?.workouts ?? [], filters), [snapshot, filters])
@@ -221,6 +248,11 @@ export function TrainingScreen({ library: suppliedLibrary }: TrainingScreenProps
     if (result.value === 'archived') setFilters({ ...defaultLibraryFilters, visibility: 'ARCHIVED' })
   }
 
+  async function selectToday() {
+    if (!library || !selected) return
+    await perform(() => library.selectToday(selected.id))
+  }
+
   function setFilter<K extends keyof LibraryFilters>(key: K, value: LibraryFilters[K]) {
     setFilters((current) => ({ ...current, [key]: value }))
   }
@@ -304,6 +336,8 @@ export function TrainingScreen({ library: suppliedLibrary }: TrainingScreenProps
             {visible.map((workout) => <button type="button" className="training-library__card" key={workout.id}
               onClick={() => showDetail(workout)}>
               <span className="training-library__card-source">{uiCopy.training.sources[workout.sourceType]}</span>
+              {snapshot.pendingTodayWorkoutId === workout.id ?
+                <span className="training-library__pending-chip">{uiCopy.training.import.todaySelected}</span> : null}
               <strong>{displayWorkoutTitle(workout)}</strong>
               <span className="training-library__card-meta">
                 {workout.activityTypeName ?? uiCopy.training.unclassified}<span aria-hidden="true"> · </span>
@@ -362,6 +396,11 @@ export function TrainingScreen({ library: suppliedLibrary }: TrainingScreenProps
             <h1>{displayWorkoutTitle(selected)}</h1>
             <span className="training-library__source-chip">{uiCopy.training.sources[selected.sourceType]}</span>
           </header>
+          {activeImport?.workoutContentId === selected.id ? <p className="training-library__notice" role="status">
+            {activeImport.status === 'NEEDS_MORE_INFO' || selected.estimatedIntensity === null
+              || selected.bodyAreas.length === 0 || selected.requiresEquipment === null
+              ? uiCopy.training.import.savedIncomplete
+              : uiCopy.training.import.saved}</p> : null}
           {notice ? <p role="status" className="training-library__notice">{notice}</p> : null}
           {error ? <p role="alert" className="training-library__error">{error}</p> : null}
           <dl className="training-library__details-grid">
@@ -394,6 +433,10 @@ export function TrainingScreen({ library: suppliedLibrary }: TrainingScreenProps
               </div>}
           </div>
           <div className="training-library__actions">
+            {selected.userVisibility !== 'ARCHIVED' ? snapshot.pendingTodayWorkoutId === selected.id ?
+              <p className="training-library__today-selected" role="status">{uiCopy.training.import.todaySelected}</p>
+              : <button type="button" className="training-library__today-action" disabled={saving}
+                onClick={() => void selectToday()}>{uiCopy.training.import.selectToday}</button> : null}
             <button type="button" onClick={() => openEdit(selected)}>{uiCopy.training.edit}</button>
             {selected.userVisibility !== 'ARCHIVED' ? <button type="button" disabled={saving}
               onClick={() => void changeVisibility(selected.userVisibility === 'TEMPORARILY_HIDDEN' ? 'ACTIVE' : 'TEMPORARILY_HIDDEN')}>
