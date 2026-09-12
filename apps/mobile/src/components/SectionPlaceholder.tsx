@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { uiCopy } from '../locales'
 
 interface SectionPlaceholderProps {
   eyebrow: string
@@ -25,7 +26,7 @@ export function SectionPlaceholder({
       </div>
       <div className="placeholder-note">
         <span className="placeholder-note__line" />
-        <span>This space is ready for your story.</span>
+        <span>{uiCopy.placeholders.note}</span>
       </div>
     </section>
   )

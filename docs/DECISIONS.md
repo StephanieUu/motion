@@ -601,6 +601,18 @@ Native Android persistence and signed upgrade data preservation are required acc
 
 ---
 
+## ADR-048 — Simplified Chinese first UI baseline
+
+**Status:** Accepted
+
+**Date:** 2026-09-12
+
+V1 user-facing UI copy defaults to Simplified Chinese (`zh-CN`). `Motion` remains the English product name. Normal screens do not mix English with Chinese except for intentional product or brand names. Internal code identifiers, database fields, migration names, enum keys, and technical logs remain in English.
+
+UI copy lives in a centralized locale dictionary so additional languages can be added later. A language-switching interface is not required by this decision.
+
+---
+
 # Decision Process
 
 New major decisions should be added as:

@@ -1,11 +1,10 @@
 import { SectionPlaceholder } from '../../components/SectionPlaceholder'
+import { uiCopy } from '../../locales'
 
 export function TrainingScreen() {
   return (
     <SectionPlaceholder
-      eyebrow="Training"
-      title="Move with intention."
-      description="Your training days will gather here in a calm, flexible rhythm."
+      {...uiCopy.placeholders.training}
       motif={<span className="motif-ring motif-ring--green" />}
     />
   )

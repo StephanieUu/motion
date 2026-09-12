@@ -2,22 +2,23 @@ import { useState, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 
 import { AppIcon, type IconName } from './AppIcon'
+import { uiCopy } from '../locales'
 
 interface AppShellProps {
   children: ReactNode
 }
 
 const tabs: ReadonlyArray<{
-  label: string
+  copyKey: 'today' | 'training' | 'food' | 'body' | 'me'
   path: string
   icon: IconName
   end?: boolean
 }> = [
-  { label: 'Today', path: '/', icon: 'today', end: true },
-  { label: 'Training', path: '/training', icon: 'training' },
-  { label: 'Food', path: '/food', icon: 'food' },
-  { label: 'Body', path: '/body', icon: 'body' },
-  { label: 'Me', path: '/me', icon: 'me' },
+  { copyKey: 'today', path: '/', icon: 'today', end: true },
+  { copyKey: 'training', path: '/training', icon: 'training' },
+  { copyKey: 'food', path: '/food', icon: 'food' },
+  { copyKey: 'body', path: '/body', icon: 'body' },
+  { copyKey: 'me', path: '/me', icon: 'me' },
 ]
 
 export function AppShell({ children }: AppShellProps) {
@@ -26,7 +27,7 @@ export function AppShell({ children }: AppShellProps) {
   return (
     <div className="app-viewport">
       <a className="skip-link" href="#main-content">
-        Skip to content
+        {uiCopy.navigation.skipToContent}
       </a>
 
       <div className="mobile-shell">
@@ -42,10 +43,10 @@ export function AppShell({ children }: AppShellProps) {
           onClick={() => setIsCoachOpen(true)}
         >
           <AppIcon name="spark" />
-          <span>Coach</span>
+          <span>{uiCopy.coach.entry}</span>
         </button>
 
-        <nav className="bottom-nav" aria-label="Primary navigation">
+        <nav className="bottom-nav" aria-label={uiCopy.navigation.primaryLabel}>
           {tabs.map((tab) => (
             <NavLink
               key={tab.path}
@@ -56,7 +57,7 @@ export function AppShell({ children }: AppShellProps) {
               end={tab.end ?? false}
             >
               <AppIcon name={tab.icon} />
-              <span>{tab.label}</span>
+              <span>{uiCopy.navigation[tab.copyKey]}</span>
             </NavLink>
           ))}
         </nav>
@@ -81,13 +82,11 @@ export function AppShell({ children }: AppShellProps) {
             <div className="coach-dialog__mark" aria-hidden="true">
               <AppIcon name="spark" />
             </div>
-            <span className="eyebrow">A quiet space to reflect</span>
-            <h2 id="coach-dialog-title">Coach is taking shape.</h2>
-            <p>
-              Your planning companion will live here when coaching becomes available.
-            </p>
+            <span className="eyebrow">{uiCopy.coach.eyebrow}</span>
+            <h2 id="coach-dialog-title">{uiCopy.coach.title}</h2>
+            <p>{uiCopy.coach.description}</p>
             <button type="button" onClick={() => setIsCoachOpen(false)}>
-              Close
+              {uiCopy.coach.close}
             </button>
           </section>
         </div>

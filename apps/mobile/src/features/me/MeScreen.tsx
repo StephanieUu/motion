@@ -1,11 +1,10 @@
 import { SectionPlaceholder } from '../../components/SectionPlaceholder'
+import { uiCopy } from '../../locales'
 
 export function MeScreen() {
   return (
     <SectionPlaceholder
-      eyebrow="Me"
-      title="Make Motion yours."
-      description="Your preferences and personal details will live here."
+      {...uiCopy.placeholders.me}
       motif={<span className="motif-profile" />}
     />
   )

@@ -49,11 +49,13 @@ describe('M1 migrations', () => {
   it('upgrades an M0 database, seeds all activity types and preserves the probe', async () => {
     const { db, sqlite } = open()
     sqlite.exec("CREATE TABLE m0_storage_probe (probe_key TEXT PRIMARY KEY, probe_value TEXT, created_at TEXT); INSERT INTO m0_storage_probe VALUES ('installation','retained','2026-01-01');")
-    expect(await migrateDatabase(db)).toBe(2)
-    expect(await migrateDatabase(db)).toBe(2)
+    expect(await migrateDatabase(db)).toBe(3)
+    expect(await migrateDatabase(db)).toBe(3)
     expect((await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM activity_types'))[0]?.count).toBe(19)
     expect((await db.query<{ id: string }>("SELECT id FROM activity_types WHERE system_key='OTHER'"))[0]?.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
     expect((await db.query<{ probe_value: string }>('SELECT probe_value FROM m0_storage_probe'))[0]?.probe_value).toBe('retained')
+    expect((await db.query<{ locale: string }>('SELECT locale FROM app_preference'))[0]?.locale).toBe('zh-CN')
+    expect((await db.query<{ name: string }>("SELECT name FROM activity_types WHERE system_key='AEROBICS'"))[0]?.name).toBe('健美操')
     expect((await db.query<{ count: number }>("SELECT COUNT(*) AS count FROM activity_preferences WHERE inferred_score<0"))[0]?.count).toBe(4)
   })
 
@@ -61,9 +63,20 @@ describe('M1 migrations', () => {
     const { db, sqlite } = open()
     sqlite.exec(migrations[0]!.sql)
     sqlite.exec("PRAGMA user_version=1; INSERT INTO activity_types VALUES ('old-type','CUSTOM','Custom',0,1); INSERT INTO workout_contents (id,content_kind,source_type,primary_activity_type_id,created_at,updated_at) VALUES ('old-workout','FOLLOW_ALONG','MANUAL','old-type','2026-01-01','2026-01-01'); INSERT INTO training_sessions (id,local_date,local_date_source,started_at,ended_at,duration_minutes,workout_content_id,activity_type_id,session_origin,lifecycle_status,completion_status,created_at,updated_at) VALUES ('old-session','2026-01-01','USER_SELECTED','2026-01-01','2026-01-01',10,'old-workout','old-type','EXISTING_LIBRARY','COMPLETED','COMPLETE','2026-01-01','2026-01-01');")
-    expect(await migrateDatabase(db)).toBe(2)
+    expect(await migrateDatabase(db)).toBe(3)
     expect((await db.query<{ workout_content_id: string }>('SELECT workout_content_id FROM training_sessions WHERE id=?', ['old-session']))[0]?.workout_content_id).toBe('old-workout')
     expect(await db.query('PRAGMA foreign_key_check')).toEqual([])
+  })
+
+  it('upgrades an existing M1 database to the Chinese default without losing workouts', async () => {
+    const { db, sqlite } = open()
+    sqlite.exec(migrations[0]!.sql)
+    sqlite.exec(migrations[1]!.sql)
+    sqlite.exec("PRAGMA user_version=2; INSERT INTO workout_contents (id,content_kind,source_type,created_at,updated_at) VALUES ('saved-workout','FOLLOW_ALONG','MANUAL','2026-01-01','2026-01-01');")
+    expect(await migrateDatabase(db)).toBe(3)
+    expect((await db.query<{ locale: string }>('SELECT locale FROM app_preference'))[0]?.locale).toBe('zh-CN')
+    expect((await db.query<{ name: string }>("SELECT name FROM activity_types WHERE system_key='OTHER'"))[0]?.name).toBe('其他')
+    expect((await db.query<{ id: string }>('SELECT id FROM workout_contents WHERE id=?', ['saved-workout']))[0]?.id).toBe('saved-workout')
   })
 
   it('rolls back a failed migration, keeping schema version and records', async () => {

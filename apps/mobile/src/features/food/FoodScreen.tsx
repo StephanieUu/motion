@@ -1,11 +1,10 @@
 import { SectionPlaceholder } from '../../components/SectionPlaceholder'
+import { uiCopy } from '../../locales'
 
 export function FoodScreen() {
   return (
     <SectionPlaceholder
-      eyebrow="Food"
-      title="Nourish the day."
-      description="Meals and daily nutrition will have a simple home here."
+      {...uiCopy.placeholders.food}
       motif={<span className="motif-bloom" />}
     />
   )

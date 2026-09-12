@@ -6,9 +6,11 @@ import { App } from './app/App'
 import { AppErrorBoundary } from './app/AppErrorBoundary'
 import { logger } from './app/logger'
 import { initializeNativeStorage } from './platform/storage/initializeNativeStorage'
+import { defaultLocale, uiCopy } from './locales'
 import './styles/index.css'
 
 document.documentElement.dataset.theme = 'light'
+document.documentElement.lang = defaultLocale
 
 const rootElement = document.getElementById('root')
 
@@ -32,9 +34,9 @@ void initializeNativeStorage().then(() => {
   logger.error('Native SQLite initialization failed', error)
   root.render(
     <main className="fatal-error" role="alert">
-      <span className="eyebrow">Storage needs attention</span>
-      <h1>Your data is still on this device.</h1>
-      <p>Motion could not open or upgrade its local database. Close the app and try again. If this continues, keep the app installed and export device logs for support.</p>
+      <span className="eyebrow">{uiCopy.errors.storage.eyebrow}</span>
+      <h1>{uiCopy.errors.storage.title}</h1>
+      <p>{uiCopy.errors.storage.description}</p>
     </main>,
   )
 })

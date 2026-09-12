@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 
 import { logger } from './logger'
+import { uiCopy } from '../locales'
 
 interface AppErrorBoundaryProps {
   children: ReactNode
@@ -30,11 +31,11 @@ export class AppErrorBoundary extends Component<
     if (this.state.hasError) {
       return (
         <main className="fatal-error" role="alert">
-          <span className="eyebrow">Motion paused</span>
-          <h1>Something went wrong.</h1>
-          <p>Your local data is still on this device. Reload Motion to try again.</p>
+          <span className="eyebrow">{uiCopy.errors.render.eyebrow}</span>
+          <h1>{uiCopy.errors.render.title}</h1>
+          <p>{uiCopy.errors.render.description}</p>
           <button type="button" onClick={() => window.location.reload()}>
-            Reload Motion
+            {uiCopy.errors.render.reload}
           </button>
         </main>
       )
