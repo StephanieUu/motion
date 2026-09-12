@@ -122,6 +122,9 @@ importers:
       '@capacitor/core':
         specifier: 8.5.1
         version: 8.5.1
+      '@motion/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       react:
         specifier: 19.3.0
         version: 19.3.0

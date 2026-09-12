@@ -13,6 +13,7 @@
     "android:open": "cap open android"
   },
   "dependencies": {
+    "@motion/domain": "workspace:*",
     "@capacitor-community/sqlite": "8.1.1",
     "@capacitor/android": "8.5.1",
     "@capacitor/core": "8.5.1",

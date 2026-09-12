@@ -1,12 +1,12 @@
 # Motion
 
-Motion is an Android-first, local-first fitness and health app. This repository currently contains the Milestone 0 foundation only: the mobile shell, Android/Capacitor project, and native SQLite persistence probe. Product domain behavior starts in Milestone 1.
+Motion is an Android-first, local-first fitness and health app. Milestone 1 adds a versioned native SQLite data layer beneath the existing mobile shell.
 
 ## Repository layout
 
 - `apps/mobile` — React, TypeScript, Vite, Tailwind, and Capacitor Android app
 - `apps/api` — intentionally empty API workspace reserved by the accepted architecture
-- `packages/domain` — future platform-neutral domain logic
+- `packages/domain` — platform-neutral training types and date rules
 - `packages/shared` — future shared contracts and utilities
 - `packages/recommendation` — future deterministic recommendation logic
 - `packages/integrations` — future integration adapters
@@ -59,9 +59,17 @@ Set-Location apps/mobile/android
 
 The Gradle configuration fails a release build when the signing properties are absent; debug builds remain available for development.
 
+## Native storage and M1 migrations
+
+The `motion` database retains the M0 persistence-probe record. On native startup, Motion enables foreign keys, applies the ordered SQL migrations from `apps/mobile/src/db/migrations` using transactional `PRAGMA user_version` upgrades, then checks the probe. A failed upgrade rolls back and shows a local storage error; the app never resets the database automatically.
+
+The M1 repository tests use a real SQLite engine and cover workout CRUD/archive, plan run-day scheduling, session recovery and historical corrections, derived state, schema constraints, migration rollback, and reopening a database file. M1 has no end-user training workflow; the Training tab remains the M0 placeholder until the later UI milestones.
+
+For a debuggable Android installation, force-stop `app.motion` and run `python scripts/inspect-android-db.py <path-to-adb>` to check schema version, seeded activity count, retained M0 probe, and foreign keys without printing personal records.
+
 ## Native M0 acceptance check
 
-On native startup, Motion opens the SQLite database named `motion`, creates only the technical `m0_storage_probe` table, and reads or creates one stable installation record. Logcat reports `Native SQLite persistence probe passed` without printing its identifier.
+On native startup, Motion opens the SQLite database named `motion` and reads or creates one stable `m0_storage_probe` installation record. Logcat reports `Native SQLite persistence probe passed` without printing its identifier.
 
 To complete M0 device acceptance:
 
