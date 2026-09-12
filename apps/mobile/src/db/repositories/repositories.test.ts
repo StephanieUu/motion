@@ -12,6 +12,7 @@ import { TrainingSessionRepository } from './TrainingSessionRepository'
 import { addLocalDays, localDateAtStart } from '@motion/domain'
 import { ActivityRepository } from './ActivityRepository'
 import { PreferenceRepository } from './PreferenceRepository'
+import { SqliteTrainingLibrary, parseWorkoutUrl, sourceTypeFromUrl } from '../../features/training/trainingLibrary'
 
 class NodeDriver implements SqlDriver {
   constructor(readonly sqlite: DatabaseSync) {}
@@ -49,8 +50,8 @@ describe('M1 migrations', () => {
   it('upgrades an M0 database, seeds all activity types and preserves the probe', async () => {
     const { db, sqlite } = open()
     sqlite.exec("CREATE TABLE m0_storage_probe (probe_key TEXT PRIMARY KEY, probe_value TEXT, created_at TEXT); INSERT INTO m0_storage_probe VALUES ('installation','retained','2026-01-01');")
-    expect(await migrateDatabase(db)).toBe(3)
-    expect(await migrateDatabase(db)).toBe(3)
+    expect(await migrateDatabase(db)).toBe(4)
+    expect(await migrateDatabase(db)).toBe(4)
     expect((await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM activity_types'))[0]?.count).toBe(19)
     expect((await db.query<{ id: string }>("SELECT id FROM activity_types WHERE system_key='OTHER'"))[0]?.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
     expect((await db.query<{ probe_value: string }>('SELECT probe_value FROM m0_storage_probe'))[0]?.probe_value).toBe('retained')
@@ -63,7 +64,7 @@ describe('M1 migrations', () => {
     const { db, sqlite } = open()
     sqlite.exec(migrations[0]!.sql)
     sqlite.exec("PRAGMA user_version=1; INSERT INTO activity_types VALUES ('old-type','CUSTOM','Custom',0,1); INSERT INTO workout_contents (id,content_kind,source_type,primary_activity_type_id,created_at,updated_at) VALUES ('old-workout','FOLLOW_ALONG','MANUAL','old-type','2026-01-01','2026-01-01'); INSERT INTO training_sessions (id,local_date,local_date_source,started_at,ended_at,duration_minutes,workout_content_id,activity_type_id,session_origin,lifecycle_status,completion_status,created_at,updated_at) VALUES ('old-session','2026-01-01','USER_SELECTED','2026-01-01','2026-01-01',10,'old-workout','old-type','EXISTING_LIBRARY','COMPLETED','COMPLETE','2026-01-01','2026-01-01');")
-    expect(await migrateDatabase(db)).toBe(3)
+    expect(await migrateDatabase(db)).toBe(4)
     expect((await db.query<{ workout_content_id: string }>('SELECT workout_content_id FROM training_sessions WHERE id=?', ['old-session']))[0]?.workout_content_id).toBe('old-workout')
     expect(await db.query('PRAGMA foreign_key_check')).toEqual([])
   })
@@ -73,7 +74,7 @@ describe('M1 migrations', () => {
     sqlite.exec(migrations[0]!.sql)
     sqlite.exec(migrations[1]!.sql)
     sqlite.exec("PRAGMA user_version=2; INSERT INTO workout_contents (id,content_kind,source_type,created_at,updated_at) VALUES ('saved-workout','FOLLOW_ALONG','MANUAL','2026-01-01','2026-01-01');")
-    expect(await migrateDatabase(db)).toBe(3)
+    expect(await migrateDatabase(db)).toBe(4)
     expect((await db.query<{ locale: string }>('SELECT locale FROM app_preference'))[0]?.locale).toBe('zh-CN')
     expect((await db.query<{ name: string }>("SELECT name FROM activity_types WHERE system_key='OTHER'"))[0]?.name).toBe('其他')
     expect((await db.query<{ id: string }>('SELECT id FROM workout_contents WHERE id=?', ['saved-workout']))[0]?.id).toBe('saved-workout')
@@ -273,3 +274,101 @@ describe('M1 repositories', () => {
 })
 
 function dbRows(db: Database, sql: string) { return db.query(sql) }
+
+describe('M2 training library persistence', () => {
+  it('upgrades an accepted M1 database and preserves its workouts and sessions', async () => {
+    const { db, sqlite } = open()
+    for (const migration of migrations.filter((item) => item.version <= 3)) sqlite.exec(migration.sql)
+    sqlite.exec("PRAGMA user_version=3; INSERT INTO workout_contents (id,content_kind,source_type,created_at,updated_at) VALUES ('old-workout','FOLLOW_ALONG','MANUAL','2026-01-01','2026-01-01');")
+    expect(await migrateDatabase(db)).toBe(4)
+    expect(await migrateDatabase(db)).toBe(4)
+    expect((await new WorkoutRepository(db).get('old-workout'))?.id).toBe('old-workout')
+    await new WorkoutRepository(db).setPreference('old-workout', 'LIKE')
+    expect((await new WorkoutRepository(db).listLibrary())[0]?.userPreference).toBe('LIKE')
+    expect(await db.query('PRAGMA foreign_key_check')).toEqual([])
+  })
+
+  it('saves URL-only B站, 小红书 and 夸克 entries without invented metadata', async () => {
+    const { db } = await ready()
+    const library = new SqliteTrainingLibrary(db)
+    for (const [url, source] of [
+      ['https://www.bilibili.com/video/BV123', 'BILIBILI'],
+      ['https://www.xiaohongshu.com/explore/123', 'XIAOHONGSHU'],
+      ['https://pan.quark.cn/s/123', 'QUARK'],
+    ] as const) {
+      const saved = await library.addUrl(url)
+      expect(saved).toMatchObject({ contentKind: 'FOLLOW_ALONG', sourceType: source,
+        title: null, durationMinutes: null, primaryActivityTypeId: null,
+        estimatedIntensity: null, userPreference: null, userVisibility: 'ACTIVE' })
+      expect(saved.sourceUrl).toBe(url)
+    }
+    const free = await library.addFreeActivity('快走')
+    expect(free).toMatchObject({ contentKind: 'FREE_ACTIVITY', sourceType: 'MANUAL',
+      title: '快走', sourceUrl: null, durationMinutes: null })
+    expect((await library.load()).workouts).toHaveLength(4)
+    expect(sourceTypeFromUrl(parseWorkoutUrl('https://b23.tv/abc'))).toBe('BILIBILI')
+    expect(sourceTypeFromUrl(parseWorkoutUrl('https://xhslink.com/abc'))).toBe('XIAOHONGSHU')
+    await expect(library.addUrl('javascript:alert(1)')).rejects.toThrow()
+    await expect(library.addUrl('not a URL')).rejects.toThrow()
+  })
+
+  it('updates incomplete metadata and reflects completed-session history', async () => {
+    const { db } = await ready()
+    const library = new SqliteTrainingLibrary(db)
+    const legacy = await new WorkoutRepository(db).create({ contentKind: 'FOLLOW_ALONG', sourceType: 'MANUAL' })
+    const yoga = (await new ActivityRepository(db).listTypes()).find((type) => type.system_key === 'YOGA')!
+    await library.update(legacy.id, { title: '拉伸', sourceUrl: '', durationMinutes: 20,
+      primaryActivityTypeId: yoga.id, estimatedIntensity: 'LOW' })
+    const saved = (await library.load()).workouts.find((item) => item.id === legacy.id)!
+    expect(saved).toMatchObject({ title: '拉伸', sourceUrl: null, durationMinutes: 20,
+      primaryActivityTypeId: yoga.id, estimatedIntensity: 'LOW', completionCount: 0 })
+    const session = await new TrainingSessionRepository(db).start({ workoutContentId: legacy.id,
+      sessionOrigin: 'EXISTING_LIBRARY', userSelectedLocalDate: '2026-09-12' })
+    await new TrainingSessionRepository(db).complete(session.id, { durationMinutes: 20, completionStatus: 'COMPLETE' })
+    const completed = (await library.load()).workouts.find((item) => item.id === legacy.id)!
+    expect(completed.completionCount).toBe(1)
+    expect(completed.lastCompletedAt).not.toBeNull()
+  })
+
+  it('persists reaction and temporary hide across reopen, then archives referenced content', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'motion-m2-'))
+    directories.push(directory)
+    const file = join(directory, 'motion.db')
+    const first = open(file)
+    await migrateDatabase(first.db)
+    const library = new SqliteTrainingLibrary(first.db)
+    const workout = await library.addUrl('https://www.bilibili.com/video/BV456')
+    await library.setPreference(workout.id, 'LOVE')
+    await library.setPreference(workout.id, 'DISLIKE')
+    await library.setVisibility(workout.id, 'TEMPORARILY_HIDDEN')
+    first.sqlite.close()
+    opened.splice(opened.indexOf(first.sqlite), 1)
+    const second = open(file)
+    await migrateDatabase(second.db)
+    const reopened = new SqliteTrainingLibrary(second.db)
+    expect((await reopened.load()).workouts.find((item) => item.id === workout.id))
+      .toMatchObject({ userPreference: 'DISLIKE', userVisibility: 'TEMPORARILY_HIDDEN' })
+    await reopened.setVisibility(workout.id, 'ACTIVE')
+    await reopened.setPreference(workout.id, null)
+    expect((await reopened.load()).workouts.find((item) => item.id === workout.id))
+      .toMatchObject({ userPreference: null, userVisibility: 'ACTIVE' })
+    const session = await new TrainingSessionRepository(second.db).start({ workoutContentId: workout.id,
+      sessionOrigin: 'EXISTING_LIBRARY' })
+    await new TrainingSessionRepository(second.db).complete(session.id, { durationMinutes: 10, completionStatus: 'COMPLETE' })
+    expect(await reopened.remove(workout.id)).toBe('archived')
+    expect((await reopened.load()).workouts.find((item) => item.id === workout.id)?.userVisibility).toBe('ARCHIVED')
+    await reopened.setVisibility(workout.id, 'ACTIVE')
+    expect((await reopened.load()).workouts.find((item) => item.id === workout.id)?.completionCount).toBe(1)
+  })
+
+  it('hard-deletes unreferenced content and cascades its workout preference', async () => {
+    const { db } = await ready()
+    const library = new SqliteTrainingLibrary(db)
+    const workout = await library.addUrl('https://pan.quark.cn/s/abc')
+    await library.setPreference(workout.id, 'NEUTRAL')
+    expect(await library.remove(workout.id)).toBe('deleted')
+    expect((await library.load()).workouts).toEqual([])
+    expect(await db.query('SELECT * FROM workout_preferences')).toEqual([])
+    expect(await db.query('PRAGMA foreign_key_check')).toEqual([])
+  })
+})

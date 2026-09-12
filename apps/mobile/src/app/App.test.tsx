@@ -4,12 +4,23 @@ import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 
 import { App } from './App'
+import type { TrainingLibrary } from '../features/training/trainingLibrary'
+
+const emptyLibrary: TrainingLibrary = {
+  load: async () => ({ workouts: [], activityTypes: [] }),
+  addUrl: async () => { throw new Error('Unexpected add') },
+  addFreeActivity: async () => { throw new Error('Unexpected add') },
+  update: async () => { throw new Error('Unexpected update') },
+  setPreference: async () => { throw new Error('Unexpected preference change') },
+  setVisibility: async () => { throw new Error('Unexpected visibility change') },
+  remove: async () => { throw new Error('Unexpected remove') },
+}
 
 describe('M0 application shell', () => {
   it('renders the Today mock and all five primary destinations', () => {
     render(
       <MemoryRouter>
-        <App />
+        <App trainingLibrary={emptyLibrary} />
       </MemoryRouter>,
     )
 
@@ -29,7 +40,7 @@ describe('M0 application shell', () => {
     const user = userEvent.setup()
     render(
       <MemoryRouter>
-        <App />
+        <App trainingLibrary={emptyLibrary} />
       </MemoryRouter>,
     )
 
@@ -41,7 +52,7 @@ describe('M0 application shell', () => {
     expect(screen.getByRole('heading', { name: '身体数据' })).toBeVisible()
 
     await user.click(screen.getByRole('link', { name: '训练' }))
-    expect(screen.getByRole('heading', { name: '训练计划' })).toBeVisible()
+    expect(await screen.findByRole('heading', { name: '训练库' })).toBeVisible()
 
     await user.click(screen.getByRole('link', { name: '我的' }))
     expect(screen.getByRole('heading', { name: '个人资料与偏好' })).toBeVisible()

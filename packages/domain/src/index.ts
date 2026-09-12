@@ -1,6 +1,7 @@
 export type ContentKind = 'FOLLOW_ALONG' | 'FREE_ACTIVITY' | 'MINI_ROUTINE'
 export type SourceType = 'BILIBILI' | 'XIAOHONGSHU' | 'QUARK' | 'YOUTUBE' | 'LOCAL' | 'WEB' | 'APP_BUILTIN' | 'MANUAL'
 export type WorkoutVisibility = 'ACTIVE' | 'TEMPORARILY_HIDDEN' | 'ARCHIVED'
+export type WorkoutPreference = 'LOVE' | 'LIKE' | 'NEUTRAL' | 'DISLIKE'
 export type CompletionStatus = 'COMPLETE' | 'MOSTLY_COMPLETE' | 'PARTIAL'
 export type PlanEquivalence = 'FULL' | 'PARTIAL' | 'NONE'
 
@@ -13,6 +14,11 @@ export interface WorkoutContent {
   sourceUrl: string | null
   durationMinutes: number | null
   primaryActivityTypeId: string | null
+  estimatedIntensity: string | null
+  impactLevel: string | null
+  requiresEquipment: boolean | null
+  hasJumping: boolean | null
+  bodyAreas: string[]
   userVisibility: WorkoutVisibility
   createdAt: string
   updatedAt: string
