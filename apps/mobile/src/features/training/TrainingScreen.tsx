@@ -4,6 +4,9 @@ import { Capacitor, type PluginListenerHandle } from '@capacitor/core'
 import { Link } from 'react-router-dom'
 import type { SourceType, WorkoutPreference, WorkoutVisibility } from '@motion/domain'
 import { logger } from '../../app/logger'
+import { ChoiceSelect } from '../../components/ChoiceSelect'
+import leavesArt from '../../assets/motion-art/motion-leaves.svg'
+import starsArt from '../../assets/motion-art/motion-stars.svg'
 import type { LibraryWorkout } from '../../db/repositories/WorkoutRepository'
 import type { WorkoutImportResult } from '../../db/repositories/WorkoutImportRepository'
 import { uiCopy } from '../../locales'
@@ -82,6 +85,7 @@ export function TrainingScreen({ library: suppliedLibrary, importResult, onImpor
   const listScrollY = useRef(0)
 
   const goBack = useCallback(() => {
+    if (document.querySelector('[data-choice-sheet="open"]')) return
     setMode(mode === 'EDIT' ? 'DETAIL' : 'LIST')
     if (mode === 'DETAIL') {
       setActiveImport(null)
@@ -271,13 +275,15 @@ export function TrainingScreen({ library: suppliedLibrary, importResult, onImpor
       {mode === 'LIST' ? (
         <>
           <header className="training-library__header">
+            <div className="training-library__header-art" aria-hidden="true">
+              <img src={leavesArt} alt="" /><img src={starsArt} alt="" />
+            </div>
             <span className="eyebrow">{uiCopy.training.eyebrow}</span>
             <div className="training-library__heading-row">
               <h1>{uiCopy.training.title}</h1>
               <button type="button" className="training-library__add" onClick={() => enterSubview('ADD_URL')}>
                 {uiCopy.training.add}</button>
             </div>
-            <span className="training-library__header-mark" aria-hidden="true" />
           </header>
 
           <Link className="training-library__plan-link" to="/training/plan" state={{ from: '/training' }}>
@@ -305,29 +311,29 @@ export function TrainingScreen({ library: suppliedLibrary, importResult, onImpor
 
           {showFilters ? (
             <div className="training-library__filters">
-              <label>{uiCopy.training.activityType}
-                <select value={filters.activityTypeId} onChange={(event) => setFilter('activityTypeId', event.target.value)}>
-                  <option value="ALL">{uiCopy.training.all}</option>
-                  <option value="UNCLASSIFIED">{uiCopy.training.unclassified}</option>
-                  {snapshot.activityTypes.map((type) => <option value={type.id} key={type.id}>{type.name}</option>)}
-                </select></label>
-              <label>{uiCopy.training.source}
-                <select value={filters.sourceType} onChange={(event) => setFilter('sourceType', event.target.value as SourceType | 'ALL')}>
-                  <option value="ALL">{uiCopy.training.all}</option>
-                  {sourceTypes.map((source) => <option value={source} key={source}>{uiCopy.training.sources[source]}</option>)}
-                </select></label>
-              <label>{uiCopy.training.duration}
-                <select value={filters.duration} onChange={(event) => setFilter('duration', event.target.value as DurationFilter)}>
-                  {durations.map((duration) => <option value={duration} key={duration}>{uiCopy.training.durationOptions[duration]}</option>)}
-                </select></label>
-              <label>{uiCopy.training.preference}
-                <select value={filters.preference} onChange={(event) => setFilter('preference', event.target.value as PreferenceFilter)}>
-                  {preferences.map((preference) => <option value={preference} key={preference}>{uiCopy.training.preferenceOptions[preference]}</option>)}
-                </select></label>
-              <label>{uiCopy.training.history}
-                <select value={filters.history} onChange={(event) => setFilter('history', event.target.value as HistoryFilter)}>
-                  {histories.map((history) => <option value={history} key={history}>{uiCopy.training.historyOptions[history]}</option>)}
-                </select></label>
+              <ChoiceSelect label={uiCopy.training.activityType} value={filters.activityTypeId}
+                onChange={(value) => setFilter('activityTypeId', value)} options={[
+                  { value: 'ALL', label: uiCopy.training.all },
+                  { value: 'UNCLASSIFIED', label: uiCopy.training.unclassified },
+                  ...snapshot.activityTypes.map((type) => ({ value: type.id, label: type.name })),
+                ]} />
+              <ChoiceSelect label={uiCopy.training.source} value={filters.sourceType}
+                onChange={(value) => setFilter('sourceType', value as SourceType | 'ALL')} options={[
+                  { value: 'ALL', label: uiCopy.training.all },
+                  ...sourceTypes.map((source) => ({ value: source, label: uiCopy.training.sources[source] })),
+                ]} />
+              <ChoiceSelect label={uiCopy.training.duration} value={filters.duration}
+                onChange={(value) => setFilter('duration', value as DurationFilter)}
+                options={durations.map((duration) => ({ value: duration,
+                  label: uiCopy.training.durationOptions[duration] }))} />
+              <ChoiceSelect label={uiCopy.training.preference} value={filters.preference}
+                onChange={(value) => setFilter('preference', value as PreferenceFilter)}
+                options={preferences.map((preference) => ({ value: preference,
+                  label: uiCopy.training.preferenceOptions[preference] }))} />
+              <ChoiceSelect label={uiCopy.training.history} value={filters.history}
+                onChange={(value) => setFilter('history', value as HistoryFilter)}
+                options={histories.map((history) => ({ value: history,
+                  label: uiCopy.training.historyOptions[history] }))} />
               <button type="button" className="training-library__clear" onClick={() =>
                 setFilters({ ...defaultLibraryFilters, visibility: filters.visibility })}>{uiCopy.training.clearFilters}</button>
             </div>
@@ -471,16 +477,16 @@ export function TrainingScreen({ library: suppliedLibrary, importResult, onImpor
             <label>{uiCopy.training.duration}
               <input type="number" min="0" step="any" value={editDuration}
                 onChange={(event) => setEditDuration(event.target.value)} /></label>
-            <label>{uiCopy.training.activityType}
-              <select value={editActivityTypeId} onChange={(event) => setEditActivityTypeId(event.target.value)}>
-                <option value="">{uiCopy.training.unclassified}</option>
-                {snapshot.activityTypes.map((type) => <option value={type.id} key={type.id}>{type.name}</option>)}
-              </select></label>
-            <label>{uiCopy.training.intensity}
-              <select value={editIntensity} onChange={(event) => setEditIntensity(event.target.value)}>
-                <option value="">{uiCopy.training.unknown}</option>
-                {Object.entries(uiCopy.training.intensities).map(([value, label]) =>
-                  <option value={value} key={value}>{label}</option>)}</select></label>
+            <ChoiceSelect label={uiCopy.training.activityType} value={editActivityTypeId}
+              onChange={setEditActivityTypeId} options={[
+                { value: '', label: uiCopy.training.unclassified },
+                ...snapshot.activityTypes.map((type) => ({ value: type.id, label: type.name })),
+              ]} />
+            <ChoiceSelect label={uiCopy.training.intensity} value={editIntensity}
+              onChange={setEditIntensity} options={[
+                { value: '', label: uiCopy.training.unknown },
+                ...Object.entries(uiCopy.training.intensities).map(([value, label]) => ({ value, label })),
+              ]} />
             {error ? <p role="alert" className="training-library__error">{error}</p> : null}
             <button type="submit" disabled={saving}>{uiCopy.training.save}</button>
           </form>

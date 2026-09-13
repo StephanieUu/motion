@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Database, type SqlDriver, type SqlRow, type SqlValue } from '../sqlite/Database'
 import { migrateDatabase, migrations } from '../migrations'
 import { WorkoutRepository } from './WorkoutRepository'
@@ -15,6 +15,9 @@ import { PreferenceRepository } from './PreferenceRepository'
 import { SqliteTrainingLibrary, parseWorkoutUrl, sourceTypeFromUrl } from '../../features/training/trainingLibrary'
 import { WorkoutImportRepository } from './WorkoutImportRepository'
 import { TrainingExecution } from '../../features/training/trainingExecution'
+import { TodayRecommendations } from '../../features/today/todayRecommendations'
+import { RecommendationRepository } from './RecommendationRepository'
+import { deriveCurrentPlanProgress, deriveTodayProvenance } from '../../features/today/todayModel'
 
 class NodeDriver implements SqlDriver {
   constructor(readonly sqlite: DatabaseSync) {}
@@ -38,8 +41,338 @@ function open(path = ':memory:') {
   return { sqlite, db: new Database(new NodeDriver(sqlite)) }
 }
 afterEach(() => {
+  vi.useRealTimers()
   opened.splice(0).forEach((sqlite) => sqlite.close())
   directories.splice(0).forEach((directory) => rmSync(directory, { recursive: true, force: true }))
+})
+
+describe('M5 recommendation persistence and execution', () => {
+  const clock = () => new Date(2026, 8, 13, 12)
+  const request = { mood: 'NORMAL', intensity: 'AUTO', duration: '15_30', novelty: 'MIXED' } as const
+
+  it('keeps the original plan day and creates no session until Start, then links the recommendation', async () => {
+    const { db } = await ready()
+    const workouts = new WorkoutRepository(db)
+    const planned = await workouts.create({ contentKind: 'FOLLOW_ALONG', sourceType: 'MANUAL', title: '计划训练', durationMinutes: 20 })
+    const actual = await workouts.create({ contentKind: 'FOLLOW_ALONG', sourceType: 'MANUAL', title: '替换训练', durationMinutes: 20 })
+    const execution = new TrainingExecution(db, clock)
+    const plan = await execution.createPlan('Seven days', [{ dayIndex: 1,
+      items: [{ workoutContentId: planned.id, role: 'PRIMARY' }] }])
+    const runId = await execution.startPlan(plan.id)
+    const recommendations = new TodayRecommendations(db, clock, () => 0.5)
+    const suggested = await recommendations.suggest(request)
+    expect(suggested?.result).toMatchObject({ mode: 'SWAP', workoutContentId: actual.id })
+    await recommendations.accept(suggested!)
+    expect((await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM training_sessions'))[0]?.count).toBe(0)
+    const day = (await execution.plans.getRunDayViews(runId))[0]!
+    expect(day.primaryWorkoutId).toBe(planned.id)
+    const chosen = await execution.load()
+    expect(chosen.pendingWorkoutId).toBe(actual.id)
+    expect(deriveTodayProvenance(chosen, '2026-09-13')).toMatchObject({
+      kind: 'RECOMMENDED_REPLACEMENT', originalWorkout: { id: planned.id } })
+    const session = await execution.startWorkout(await execution.load())
+    expect(session.trainingPlanRunDayId).toBe(day.id)
+    expect(session.workoutContentId).toBe(actual.id)
+    expect((await db.query<{ daily_recommendation_id: string }>(
+      'SELECT daily_recommendation_id FROM training_sessions WHERE id=?', [session.id]))[0]?.daily_recommendation_id).toBe(suggested!.id)
+    await execution.completeWorkout(session.id, 20, 'COMPLETE', 'PARTIAL')
+    expect((await execution.plans.getRunDayViews(runId))[0]).toMatchObject({
+      primaryWorkoutId: planned.id, executionKind: 'REPLACEMENT', planEquivalence: 'PARTIAL' })
+    expect((await recommendations.latest())).toBeNull()
+    expect((await db.query<{ status: string }>('SELECT status FROM daily_recommendations WHERE id=?', [suggested!.id]))[0]?.status).toBe('COMPLETED')
+  })
+
+  it('persists accepted pending selection and M0–M4 content across reopen without migration', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'motion-m5-'))
+    directories.push(directory)
+    const file = join(directory, 'motion.db')
+    const first = open(file)
+    await migrateDatabase(first.db)
+    first.sqlite.exec("CREATE TABLE m0_storage_probe (probe_key TEXT PRIMARY KEY, probe_value TEXT); INSERT INTO m0_storage_probe VALUES ('installation','retained')")
+    const workout = await new WorkoutRepository(first.db).create({ contentKind: 'FREE_ACTIVITY', sourceType: 'MANUAL', title: '快走', durationMinutes: 20 })
+    const another = await new WorkoutRepository(first.db).create({ contentKind: 'FOLLOW_ALONG', sourceType: 'BILIBILI', title: '有氧训练', durationMinutes: 20 })
+    const service = new TodayRecommendations(first.db, clock, () => 0.5)
+    const suggestion = await service.suggest(request)
+    expect([workout.id, another.id]).toContain(suggestion?.result.workoutContentId)
+    await service.accept(suggestion!)
+    first.sqlite.close(); opened.splice(opened.indexOf(first.sqlite), 1)
+    const second = open(file)
+    expect(await migrateDatabase(second.db)).toBe(5)
+    const restored = new TodayRecommendations(second.db, clock)
+    expect((await restored.latest())?.status).toBe('ACCEPTED')
+    expect((await restored.latest())?.result.workoutContentId).toBe(suggestion!.result.workoutContentId)
+    expect((await new TrainingExecution(second.db, clock).load()).pendingWorkoutId).toBe(suggestion!.result.workoutContentId)
+    expect(deriveTodayProvenance(await new TrainingExecution(second.db, clock).load(), '2026-09-13'))
+      .toMatchObject({ kind: 'TODAY_RECOMMENDED' })
+    expect((await second.db.query<{ probe_value: string }>('SELECT probe_value FROM m0_storage_probe'))[0]?.probe_value).toBe('retained')
+    expect((await new WorkoutRepository(second.db).listLibrary()).length).toBe(2)
+    expect(await second.db.query('PRAGMA foreign_key_check')).toEqual([])
+  })
+
+  it('restores recommended replacement provenance against the unchanged plan after reopen', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'motion-m5-swap-'))
+    directories.push(directory)
+    const file = join(directory, 'motion.db')
+    const first = open(file)
+    await migrateDatabase(first.db)
+    const workouts = new WorkoutRepository(first.db)
+    const planned = await workouts.create({ contentKind: 'FOLLOW_ALONG', sourceType: 'MANUAL',
+      title: '计划训练', durationMinutes: 20 })
+    const replacement = await workouts.create({ contentKind: 'FOLLOW_ALONG', sourceType: 'MANUAL',
+      title: '替换训练', durationMinutes: 20 })
+    const execution = new TrainingExecution(first.db, clock)
+    const plan = await execution.createPlan('Plan', [{ dayIndex: 1,
+      items: [{ workoutContentId: planned.id, role: 'PRIMARY' }] }])
+    await execution.startPlan(plan.id)
+    const service = new TodayRecommendations(first.db, clock, () => 0.5)
+    const suggested = await service.suggest(request)
+    expect(suggested?.result.workoutContentId).toBe(replacement.id)
+    await service.accept(suggested!)
+    first.sqlite.close(); opened.splice(opened.indexOf(first.sqlite), 1)
+    const reopened = open(file)
+    await migrateDatabase(reopened.db)
+    const restored = await new TrainingExecution(reopened.db, clock).load()
+    expect(restored.currentDay?.primaryWorkoutId).toBe(planned.id)
+    expect(restored.selectionOrigin).toBe('RECOMMENDATION')
+    expect(deriveTodayProvenance(restored, '2026-09-13')).toMatchObject({
+      kind: 'RECOMMENDED_REPLACEMENT', originalWorkout: { id: planned.id } })
+    const started = await new TrainingExecution(reopened.db, clock).startWorkout(restored)
+    reopened.sqlite.close(); opened.splice(opened.indexOf(reopened.sqlite), 1)
+    const resumed = open(file)
+    await migrateDatabase(resumed.db)
+    const inProgress = await new TrainingExecution(resumed.db, clock).load()
+    expect(inProgress.session?.id).toBe(started.id)
+    expect(deriveTodayProvenance(inProgress, '2026-09-13')).toMatchObject({
+      kind: 'RECOMMENDED_REPLACEMENT', originalWorkout: { id: planned.id } })
+  })
+
+  it('selects an ActivityType as a Free Activity without a session and restores it after reopen', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'motion-m5-activity-'))
+    directories.push(directory)
+    const file = join(directory, 'motion.db')
+    const first = open(file)
+    await migrateDatabase(first.db)
+    const service = new TodayRecommendations(first.db, clock, () => 0.5)
+    const idea = await service.suggest(request, true)
+    expect(idea?.workout).toBeNull()
+    const chosen = await service.chooseActivity(idea!)
+    expect(chosen).toMatchObject({ status: 'ACCEPTED', recommendationSource: 'EXPLORATION',
+      workout: { contentKind: 'FREE_ACTIVITY', sourceType: 'MANUAL',
+        primaryActivityTypeId: idea!.result.activityTypeId } })
+    expect(chosen.workout?.title).toBe(idea?.activityName)
+    const selected = await new TrainingExecution(first.db, clock).load()
+    expect(selected).toMatchObject({ pendingWorkoutId: chosen.workout!.id,
+      mainWorkout: { id: chosen.workout!.id }, session: null, selectionOrigin: 'RECOMMENDATION' })
+    expect(deriveTodayProvenance(selected, '2026-09-13')).toMatchObject({ kind: 'TODAY_RECOMMENDED' })
+    expect((await first.db.query<{ count: number }>('SELECT COUNT(*) AS count FROM training_sessions'))[0]?.count).toBe(0)
+    await service.chooseActivity(idea!)
+    expect((await first.db.query<{ count: number }>("SELECT COUNT(*) AS count FROM workout_contents WHERE content_kind='FREE_ACTIVITY'"))[0]?.count).toBe(1)
+    first.sqlite.close(); opened.splice(opened.indexOf(first.sqlite), 1)
+    const reopened = open(file)
+    await migrateDatabase(reopened.db)
+    expect((await new TodayRecommendations(reopened.db, clock).latest())?.workout?.id).toBe(chosen.workout?.id)
+    expect((await new TrainingExecution(reopened.db, clock).load()).pendingWorkoutId).toBe(chosen.workout?.id)
+    expect((await reopened.db.query<{ count: number }>('SELECT COUNT(*) AS count FROM training_sessions'))[0]?.count).toBe(0)
+  })
+
+  it('reuses an equivalent active Free Activity and changes inspiration without saving the previous idea', async () => {
+    const { db } = await ready()
+    const service = new TodayRecommendations(db, clock, () => 0.5)
+    const first = await service.suggest(request, true)
+    const second = await service.suggest(request, true, first!.result.activityTypeId)
+    expect(second?.result.activityTypeId).not.toBe(first?.result.activityTypeId)
+    expect((await db.query<{ count: number }>("SELECT COUNT(*) AS count FROM workout_contents WHERE content_kind='FREE_ACTIVITY'"))[0]?.count).toBe(0)
+    expect((await db.query<{ status: string }>('SELECT status FROM daily_recommendations WHERE id=?',
+      [first!.id]))[0]?.status).toBe('REPLACED')
+    const equivalent = await new WorkoutRepository(db).create({ contentKind: 'FREE_ACTIVITY',
+      sourceType: 'MANUAL', title: '已有自由活动', primaryActivityTypeId: second!.result.activityTypeId })
+    const chosen = await service.chooseActivity(second!)
+    expect(chosen.workout?.id).toBe(equivalent.id)
+    expect((await db.query<{ count: number }>("SELECT COUNT(*) AS count FROM workout_contents WHERE content_kind='FREE_ACTIVITY'"))[0]?.count).toBe(1)
+  })
+
+  it('keeps Planned Rest unchanged when choosing and completing a suggested Free Activity', async () => {
+    const { db } = await ready()
+    const planned = await new WorkoutRepository(db).create({ contentKind: 'FOLLOW_ALONG',
+      sourceType: 'MANUAL', title: '计划训练' })
+    const execution = new TrainingExecution(db, clock)
+    const plan = await execution.createPlan('Rest first', [
+      { dayIndex: 1, isRestDay: true },
+      { dayIndex: 2, items: [{ workoutContentId: planned.id, role: 'PRIMARY' }] },
+    ])
+    const runId = await execution.startPlan(plan.id)
+    const service = new TodayRecommendations(db, clock, () => 0.5)
+    const idea = await service.suggest(request, true)
+    expect(idea?.workout).toBeNull()
+    const chosen = await service.chooseActivity(idea!)
+    const selected = await execution.load()
+    expect(selected.pendingWorkoutId).toBe(chosen.workout?.id)
+    expect(deriveTodayProvenance(selected, '2026-09-13')).toMatchObject({ kind: 'REST_EXTRA' })
+    expect((await execution.plans.getRunDayViews(runId))[0]).toMatchObject({
+      status: 'SCHEDULED', isRestDay: true, primaryWorkoutId: null })
+    expect(deriveCurrentPlanProgress(selected)).toMatchObject({ completedTraining: 0, totalTraining: 1 })
+    expect((await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM training_sessions'))[0]?.count).toBe(0)
+    const session = await execution.startWorkout(selected)
+    expect(session.trainingPlanRunDayId).toBeNull()
+    await execution.completeWorkout(session.id, 20, 'COMPLETE')
+    expect((await execution.plans.getRunDayViews(runId))[0]).toMatchObject({
+      status: 'SCHEDULED', isRestDay: true, primaryWorkoutId: null, planEquivalence: null })
+    expect(deriveCurrentPlanProgress(await execution.load())).toMatchObject({
+      completedTraining: 0, totalTraining: 1 })
+  })
+
+  it('stores ActivityType-only inspiration, then links the next shared import without creating a session', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 8, 13, 12))
+    const { db } = await ready()
+    const service = new TodayRecommendations(db, clock, () => 0.5)
+    const idea = await service.suggest(request, true)
+    expect(idea?.result.workoutContentId).toBeNull()
+    expect(idea?.result.activityTypeId).toBeTruthy()
+    await service.findNew(idea!)
+    const library = new SqliteTrainingLibrary(db)
+    const imported = await library.importShare({ eventId: 'm5-quark-share', text: 'https://pan.quark.cn/s/abc', subject: null })
+    expect((await db.query<{ resulting_workout_content_id: string }>(
+      'SELECT resulting_workout_content_id FROM exploration_recommendations WHERE id=?', [idea!.id]))[0]?.resulting_workout_content_id)
+      .toBe(imported.workoutContentId)
+    expect((await service.latest())?.result.workoutContentId).toBe(imported.workoutContentId)
+    expect((await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM training_sessions'))[0]?.count).toBe(0)
+  })
+
+  it('offers a matching saved workout directly for a preferred ActivityType idea', async () => {
+    const { db } = await ready()
+    const activities = new ActivityRepository(db)
+    const aerobics = (await activities.listTypes()).find((item) => item.system_key === 'AEROBICS')!
+    await activities.setExplicitPreference(aerobics.id, 'LOVE')
+    const workout = await new WorkoutRepository(db).create({ contentKind: 'FOLLOW_ALONG',
+      sourceType: 'BILIBILI', title: '健美操', primaryActivityTypeId: aerobics.id, durationMinutes: 20 })
+    const service = new TodayRecommendations(db, clock, () => 0.5)
+    const idea = await service.suggest(request, true)
+    expect(idea?.result).toMatchObject({ mode: 'EXPLORATION', activityTypeId: aerobics.id,
+      workoutContentId: workout.id, reasonCodes: expect.arrayContaining(['NEW_ACTIVITY']) })
+    expect(idea?.recommendationSource).toBe('EXPLORATION')
+    expect((await service.latest())?.recommendationSource).toBe('EXPLORATION')
+    await service.accept(idea!)
+    expect((await new TrainingExecution(db, clock).load()).pendingWorkoutId).toBe(workout.id)
+    expect((await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM exploration_recommendations'))[0]?.count).toBe(0)
+  })
+
+  it('rejects acceptance after archival and does not alter pending selection', async () => {
+    const { db } = await ready()
+    const workout = await new WorkoutRepository(db).create({ contentKind: 'FOLLOW_ALONG', sourceType: 'MANUAL', durationMinutes: 20 })
+    const service = new TodayRecommendations(db, clock, () => 0.5)
+    const suggested = await service.suggest(request)
+    expect(suggested?.result.workoutContentId).toBe(workout.id)
+    await new WorkoutRepository(db).remove(workout.id)
+    await expect(service.accept(suggested!)).rejects.toThrow('not selectable')
+    expect((await new TrainingExecution(db, clock).load()).pendingWorkoutId).toBeNull()
+  })
+
+  it('exposes only active preference context from the accepted schema', async () => {
+    const { db } = await ready()
+    const activities = new ActivityRepository(db)
+    const activity = (await activities.listTypes()).find((item) => item.system_key === 'AEROBICS')!
+    await activities.setExplicitPreference(activity.id, 'AVOID')
+    const workout = await new WorkoutRepository(db).create({ contentKind: 'FOLLOW_ALONG',
+      sourceType: 'MANUAL', durationMinutes: 20, primaryActivityTypeId: activity.id })
+    const context = await new RecommendationRepository(db).context('2026-09-13', await new WorkoutRepository(db).listLibrary())
+    expect(context.activities.find((item) => item.id === activity.id)?.preference).toBe('AVOID')
+    expect(context.workouts.find((item) => item.id === workout.id)?.durationMinutes).toBe(20)
+    expect(await new TodayRecommendations(db, clock).suggest(request)).toBeNull()
+  })
+
+  it('a manual library selection supersedes recommendation provenance, even for the same workout', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'motion-m5-manual-'))
+    directories.push(directory)
+    const file = join(directory, 'motion.db')
+    const first = open(file)
+    await migrateDatabase(first.db)
+    const { db } = first
+    const workout = await new WorkoutRepository(db).create({ contentKind: 'FOLLOW_ALONG',
+      sourceType: 'MANUAL', durationMinutes: 20 })
+    const service = new TodayRecommendations(db, clock, () => 0.5)
+    const suggestion = await service.suggest(request)
+    await service.accept(suggestion!)
+    expect((await new TrainingExecution(db, clock).load()).selectionOrigin).toBe('RECOMMENDATION')
+    await new TrainingExecution(db, clock).selectWorkout(workout.id)
+    const snapshot = await new TrainingExecution(db, clock).load()
+    expect(snapshot.selectionOrigin).toBe('MANUAL')
+    expect(deriveTodayProvenance(snapshot, '2026-09-13')).toMatchObject({ kind: 'MANUAL' })
+    expect((await db.query<{ status: string }>('SELECT status FROM daily_recommendations WHERE id=?',
+      [suggestion!.id]))[0]?.status).toBe('REPLACED')
+    first.sqlite.close(); opened.splice(opened.indexOf(first.sqlite), 1)
+    const reopened = open(file)
+    await migrateDatabase(reopened.db)
+    expect(deriveTodayProvenance(await new TrainingExecution(reopened.db, clock).load(), '2026-09-13'))
+      .toMatchObject({ kind: 'MANUAL' })
+  })
+
+  it('keeps a rest-day workout extra and never credits the planned training denominator', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'motion-m5-rest-'))
+    directories.push(directory)
+    const file = join(directory, 'motion.db')
+    const first = open(file)
+    await migrateDatabase(first.db)
+    const { db } = first
+    const workout = await new WorkoutRepository(db).create({ contentKind: 'FREE_ACTIVITY',
+      sourceType: 'MANUAL', title: '快走', durationMinutes: 20 })
+    const execution = new TrainingExecution(db, clock)
+    const plan = await execution.createPlan('Rest first', [
+      { dayIndex: 1, isRestDay: true },
+      { dayIndex: 2, items: [{ workoutContentId: workout.id, role: 'PRIMARY' }] },
+    ])
+    const runId = await execution.startPlan(plan.id)
+    await execution.selectWorkout(workout.id)
+    const selected = await execution.load()
+    expect(deriveTodayProvenance(selected, '2026-09-13')).toMatchObject({ kind: 'REST_EXTRA' })
+    const started = await execution.startWorkout(selected)
+    expect(started.trainingPlanRunDayId).toBeNull()
+    expect(deriveTodayProvenance(await execution.load(), '2026-09-13')).toMatchObject({ kind: 'REST_EXTRA' })
+    await execution.completeWorkout(started.id, 20, 'COMPLETE')
+    const restDay = (await execution.plans.getRunDayViews(runId))[0]!
+    expect(restDay).toMatchObject({ isRestDay: true, primaryWorkoutId: null,
+      status: 'SCHEDULED', planEquivalence: null })
+    expect(deriveCurrentPlanProgress(await execution.load())).toMatchObject({
+      totalDays: 2, completedTraining: 0, totalTraining: 1 })
+    await execution.rest(restDay.id)
+    expect(deriveCurrentPlanProgress(await execution.load())).toMatchObject({
+      totalDays: 2, completedTraining: 0, totalTraining: 1 })
+    first.sqlite.close(); opened.splice(opened.indexOf(first.sqlite), 1)
+    const reopened = open(file)
+    await migrateDatabase(reopened.db)
+    const restoredExecution = new TrainingExecution(reopened.db, clock)
+    expect((await restoredExecution.plans.getRunDayViews(runId))[0]).toMatchObject({
+      isRestDay: true, primaryWorkoutId: null, status: 'PLANNED_REST', planEquivalence: null })
+    expect(deriveCurrentPlanProgress(await restoredExecution.load())).toMatchObject({
+      totalDays: 2, completedTraining: 0, totalTraining: 1 })
+  })
+
+  it('restores chronological and completed-training progress after database reopen', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'motion-m5-progress-'))
+    directories.push(directory)
+    const file = join(directory, 'motion.db')
+    const first = open(file)
+    await migrateDatabase(first.db)
+    const workout = await new WorkoutRepository(first.db).create({ contentKind: 'FOLLOW_ALONG',
+      sourceType: 'MANUAL', durationMinutes: 20 })
+    const execution = new TrainingExecution(first.db, clock)
+    const plan = await execution.createPlan('Three days', [
+      { dayIndex: 1, items: [{ workoutContentId: workout.id, role: 'PRIMARY' }] },
+      { dayIndex: 2, isRestDay: true },
+      { dayIndex: 3, items: [{ workoutContentId: workout.id, role: 'PRIMARY' }] },
+    ])
+    await execution.startPlan(plan.id)
+    const started = await execution.startWorkout(await execution.load())
+    await execution.completeWorkout(started.id, 20, 'COMPLETE')
+    first.sqlite.close(); opened.splice(opened.indexOf(first.sqlite), 1)
+    const second = open(file)
+    await migrateDatabase(second.db)
+    const restored = await new TrainingExecution(second.db, clock).load()
+    expect(deriveCurrentPlanProgress(restored)).toMatchObject({
+      position: 2, totalDays: 3, completedTraining: 1, totalTraining: 2,
+      segments: [{ kind: 'COMPLETED' }, { kind: 'REST' }, { kind: 'PENDING' }] })
+    expect(await second.db.query('PRAGMA foreign_key_check')).toEqual([])
+  })
 })
 
 async function ready() {
@@ -173,6 +506,8 @@ describe('M1 repositories', () => {
   })
 
   it('recovers an in-progress session and recalculates active day, streak, weekly goal and plan progress', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 8, 13, 12))
     const { db } = await ready()
     const workouts = new WorkoutRepository(db)
     const plans = new TrainingPlanRepository(db)

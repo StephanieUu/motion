@@ -6,6 +6,7 @@ interface SessionRow extends SqlRow {
   id: string; local_date: string; local_date_source: string; started_at: string; ended_at: string | null
   duration_minutes: number | null; workout_content_id: string | null; activity_type_id: string | null
   training_plan_run_day_id: string | null; lifecycle_status: TrainingSession['lifecycleStatus']
+  daily_recommendation_id: string | null
   completion_status: CompletionStatus | null; qualifies_for_active_day: number
 }
 
@@ -21,6 +22,7 @@ export interface StartSession {
   workoutContentId?: string
   activityTypeId?: string
   trainingPlanRunDayId?: string
+  dailyRecommendationId?: string
   miniRoutineVersionId?: string
   sessionOrigin: 'PLAN' | 'EXISTING_LIBRARY' | 'NEW_IMPORT' | 'FREE_ACTIVITY' | 'RESCUE'
   startedAt?: Date
@@ -65,14 +67,22 @@ export class TrainingSessionRepository {
           JOIN training_plan_runs r ON r.id=rd.training_plan_run_id WHERE rd.id=?`, [input.trainingPlanRunDayId])
         if (runDay[0]?.status !== 'SCHEDULED' || runDay[0].run_status !== 'ACTIVE') throw new Error('Plan run-day is not available')
       }
+      if (input.dailyRecommendationId) {
+        const rec = (await tx.query<{ local_date: string; selected_workout_content_id: string | null; status: string }>(
+          'SELECT local_date,selected_workout_content_id,status FROM daily_recommendations WHERE id=?',
+          [input.dailyRecommendationId]))[0]
+        if (!rec || rec.local_date !== localDate || rec.selected_workout_content_id !== (input.workoutContentId ?? null)
+          || rec.status !== 'ACCEPTED') throw new Error('Recommendation does not match this session')
+      }
       await tx.run(`INSERT INTO training_sessions (id,local_date,local_date_source,time_zone_id_at_start,
         utc_offset_minutes_at_start,started_at,workout_content_id,activity_type_id,training_plan_run_day_id,
-        mini_routine_version_id,session_origin,lifecycle_status,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,? ,?,'IN_PROGRESS',?,?)`,
+        daily_recommendation_id,mini_routine_version_id,session_origin,lifecycle_status,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'IN_PROGRESS',?,?)`,
       [id, localDate, input.userSelectedLocalDate ? 'USER_SELECTED' : 'START_TIME',
         Intl.DateTimeFormat().resolvedOptions().timeZone, -started.getTimezoneOffset(), started.toISOString(),
         input.workoutContentId ?? null, input.activityTypeId ?? null, input.trainingPlanRunDayId ?? null,
-        input.miniRoutineVersionId ?? null, input.sessionOrigin, new Date().toISOString(), new Date().toISOString()])
+        input.dailyRecommendationId ?? null, input.miniRoutineVersionId ?? null, input.sessionOrigin,
+        new Date().toISOString(), new Date().toISOString()])
       await rebuildTrainingState(tx, [localDate], input.trainingPlanRunDayId ? [input.trainingPlanRunDayId] : [])
       return id
     })
@@ -98,6 +108,9 @@ export class TrainingSessionRepository {
       await tx.run(`UPDATE training_sessions SET lifecycle_status='COMPLETED',completion_status=?,ended_at=?,
         duration_minutes=?,activity_type_id=?,mini_routine_required_items_confirmed=?,updated_at=? WHERE id=? AND lifecycle_status='IN_PROGRESS'`,
       [input.completionStatus, endedAt, input.durationMinutes, activityTypeId, input.requiredMiniRoutineItemsConfirmed ? 1 : 0, new Date().toISOString(), id])
+      if (session.daily_recommendation_id) await tx.run(
+        "UPDATE daily_recommendations SET status='COMPLETED' WHERE id=? AND status='ACCEPTED'",
+        [session.daily_recommendation_id])
       if (session.training_plan_run_day_id && input.planEquivalence) {
         await tx.run('UPDATE training_plan_run_days SET plan_equivalence=? WHERE id=?', [input.planEquivalence, session.training_plan_run_day_id])
       }
@@ -119,6 +132,9 @@ export class TrainingSessionRepository {
       if (session.lifecycle_status !== 'IN_PROGRESS') throw new Error('Completed session cannot be abandoned')
       await tx.run("UPDATE training_sessions SET lifecycle_status='ABANDONED',ended_at=?,updated_at=? WHERE id=?",
         [new Date().toISOString(), new Date().toISOString(), id])
+      if (session.daily_recommendation_id) await tx.run(
+        "UPDATE daily_recommendations SET status='REJECTED' WHERE id=? AND status='ACCEPTED'",
+        [session.daily_recommendation_id])
       await rebuildTrainingState(tx, [session.local_date], session.training_plan_run_day_id ? [session.training_plan_run_day_id] : [])
       return fromRow((await tx.query<SessionRow>('SELECT * FROM training_sessions WHERE id=?', [id]))[0]!)
     })

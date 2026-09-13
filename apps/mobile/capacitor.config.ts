@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Motion',
   webDir: 'dist',
   android: {
-    backgroundColor: '#f7f9f7',
+    backgroundColor: '#f7f3e9',
   },
   server: {
     androidScheme: 'https',

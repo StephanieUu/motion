@@ -5,6 +5,7 @@ import { WorkoutRepository, type LibraryWorkout, type NewWorkout } from '../../d
 import { getNativeDatabase } from '../../db/sqlite/nativeDatabase'
 import type { Database } from '../../db/sqlite/Database'
 import { WorkoutImportRepository, type WorkoutImportResult } from '../../db/repositories/WorkoutImportRepository'
+import { RecommendationRepository } from '../../db/repositories/RecommendationRepository'
 import { localDateAtStart } from '@motion/domain'
 import type { SharedWorkoutPayload } from '@motion/integrations'
 
@@ -71,7 +72,7 @@ export class SqliteTrainingLibrary implements TrainingLibrary {
   private readonly activities: ActivityRepository
   private readonly imports: WorkoutImportRepository
 
-  constructor(db: Database) {
+  constructor(private readonly db: Database) {
     this.workouts = new WorkoutRepository(db)
     this.activities = new ActivityRepository(db)
     this.imports = new WorkoutImportRepository(db)
@@ -133,8 +134,10 @@ export class SqliteTrainingLibrary implements TrainingLibrary {
     return this.workouts.remove(id)
   }
 
-  importShare(payload: SharedWorkoutPayload): Promise<WorkoutImportResult> {
-    return this.imports.importShare(payload)
+  async importShare(payload: SharedWorkoutPayload): Promise<WorkoutImportResult> {
+    const result = await this.imports.importShare(payload)
+    await new RecommendationRepository(this.db).linkImportedWorkout(localDateAtStart(new Date()), result.workoutContentId)
+    return result
   }
 
   selectToday(id: string): Promise<void> {

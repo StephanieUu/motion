@@ -11,6 +11,13 @@ import type { TrainingLibrary } from './trainingLibrary'
 
 const render = (ui: ReactElement) => renderBase(<MemoryRouter>{ui}</MemoryRouter>)
 
+async function choose(user: ReturnType<typeof userEvent.setup>, label: string, value: string) {
+  await user.click(screen.getByRole('combobox', { name: new RegExp(label) }))
+  const option = screen.getByRole('listbox').querySelector(`[data-value="${value}"]`)
+  expect(option).not.toBeNull()
+  await user.click(option as HTMLElement)
+}
+
 const nativeBack = vi.hoisted(() => ({ listener: null as (() => void) | null }))
 vi.mock('@capacitor/app', () => ({
   App: {
@@ -159,7 +166,7 @@ describe('M2 Training screen', () => {
     await screen.findByRole('heading', { name: uiCopy.training.title })
     await user.click(screen.getByRole('button', { name: uiCopy.training.filters }))
     await user.type(screen.getByRole('searchbox'), '核心')
-    await user.selectOptions(screen.getByLabelText(uiCopy.training.source), 'QUARK')
+    await choose(user, uiCopy.training.source, 'QUARK')
     document.documentElement.scrollTop = 320
 
     await user.click(screen.getByRole('button', { name: /核心训练/ }))
@@ -171,7 +178,7 @@ describe('M2 Training screen', () => {
     expect(screen.getByRole('heading', { name: '核心训练' })).toBeVisible()
     await user.click(screen.getByRole('button', { name: uiCopy.training.back }))
     expect(screen.getByRole('searchbox')).toHaveValue('核心')
-    expect(screen.getByLabelText(uiCopy.training.source)).toHaveValue('QUARK')
+    expect(screen.getByRole('combobox', { name: new RegExp(uiCopy.training.source) })).toHaveTextContent('夸克')
     expect(document.documentElement.scrollTop).toBe(320)
 
     await user.click(screen.getByRole('button', { name: uiCopy.training.add }))
@@ -179,7 +186,7 @@ describe('M2 Training screen', () => {
     expect(screen.getByRole('heading', { name: uiCopy.training.addFree })).toBeVisible()
     await user.click(screen.getByRole('button', { name: uiCopy.training.back }))
     expect(screen.getByRole('searchbox')).toHaveValue('核心')
-    expect(screen.getByLabelText(uiCopy.training.source)).toHaveValue('QUARK')
+    expect(screen.getByRole('combobox', { name: new RegExp(uiCopy.training.source) })).toHaveTextContent('夸克')
   })
 
   it('uses Android back for the same Training subview transitions', async () => {
@@ -223,8 +230,8 @@ describe('M2 Training screen', () => {
     await user.click(screen.getByRole('button', { name: uiCopy.training.edit }))
     await user.type(screen.getByLabelText(uiCopy.training.titleField), '拉伸训练')
     await user.type(screen.getByLabelText(uiCopy.training.duration), '20')
-    await user.selectOptions(screen.getByLabelText(uiCopy.training.activityType), 'yoga')
-    await user.selectOptions(screen.getByLabelText(uiCopy.training.intensity), 'LOW')
+    await choose(user, uiCopy.training.activityType, 'yoga')
+    await choose(user, uiCopy.training.intensity, 'LOW')
     await user.click(screen.getByRole('button', { name: uiCopy.training.save }))
     expect(await screen.findByRole('heading', { name: '拉伸训练' })).toBeVisible()
     expect(screen.getByText('20 分钟')).toBeVisible()
@@ -267,8 +274,8 @@ describe('M2 Training screen', () => {
     expect(screen.queryByRole('button', { name: /拉伸训练/ })).not.toBeInTheDocument()
     await user.clear(screen.getByRole('searchbox'))
     await user.click(screen.getByRole('button', { name: uiCopy.training.filters }))
-    await user.selectOptions(screen.getByLabelText(uiCopy.training.source), 'QUARK')
-    await user.selectOptions(screen.getByLabelText('训练感受'), 'LIKE')
+    await choose(user, uiCopy.training.source, 'QUARK')
+    await choose(user, '训练感受', 'LIKE')
     expect(screen.getByRole('button', { name: /核心训练/ })).toBeVisible()
     await user.click(screen.getByRole('button', { name: /核心训练/ }))
     await user.click(screen.getByRole('button', { name: uiCopy.training.remove }))

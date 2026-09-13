@@ -85,6 +85,12 @@ export class WorkoutImportRepository {
         VALUES (?,?,?) ON CONFLICT(local_date) DO UPDATE SET
         workout_content_id=excluded.workout_content_id, selected_at=excluded.selected_at`,
       [localDate, workoutContentId, new Date().toISOString()])
+      // A library selection supersedes a pending recommendation, including when the
+      // user manually picks the same workout. An in-progress session keeps its link.
+      await tx.run(`UPDATE daily_recommendations SET status='REPLACED'
+        WHERE local_date=? AND status='ACCEPTED' AND NOT EXISTS (
+          SELECT 1 FROM training_sessions s WHERE s.daily_recommendation_id=daily_recommendations.id
+            AND s.lifecycle_status='IN_PROGRESS')`, [localDate])
     })
   }
 

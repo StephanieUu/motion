@@ -4,6 +4,8 @@ import { Capacitor, type PluginListenerHandle } from '@capacitor/core'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import type { PlanDayInput } from '@motion/domain'
 import { logger } from '../../app/logger'
+import { ChoiceSelect } from '../../components/ChoiceSelect'
+import celestialFrame from '../../assets/motion-art/motion-celestial-frame.svg'
 import { uiCopy } from '../../locales'
 import { displayWorkoutTitle } from './libraryModel'
 import { openTrainingExecution, type ExecutionSnapshot, type TrainingExecution } from './trainingExecution'
@@ -51,7 +53,9 @@ export function TrainingPlanScreen({ execution: supplied }: { execution?: Traini
     if (!Capacitor.isNativePlatform()) return
     let listener: PluginListenerHandle | undefined
     let disposed = false
-    void CapacitorApp.addListener('backButton', () => navigate(backPath)).then((handle) => {
+    void CapacitorApp.addListener('backButton', () => {
+      if (!document.querySelector('[data-choice-sheet="open"]')) navigate(backPath)
+    }).then((handle) => {
       if (disposed) void handle.remove()
       else listener = handle
     })
@@ -98,13 +102,15 @@ export function TrainingPlanScreen({ execution: supplied }: { execution?: Traini
         className="plan-screen__back">‹</Link>
       <span className="eyebrow">{uiCopy.training.eyebrow}</span>
       <h1>{uiCopy.plan.title}</h1>
+      <img className="plan-screen__emblem" src={celestialFrame} alt="" aria-hidden="true" />
     </header>
     {error ? <p role="alert" className="plan-screen__error">{error}</p> : null}
 
     {active ? <section className="plan-screen__current" aria-label={uiCopy.plan.active}>
       <div className="plan-screen__heading"><h2>{data.plans.find((plan) => plan.id === active.trainingPlanId)?.title}</h2>
         <span>{active.status === 'PAUSED' ? uiCopy.plan.paused : uiCopy.plan.active}</span></div>
-      {data.runDays.map((day) => <div className="plan-screen__day" key={day.id}>
+      {data.runDays.map((day) => <div className="plan-screen__day" key={day.id}
+        data-status={day.status} data-rest={day.isRestDay} data-current={day.id === current?.id}>
         <strong>{uiCopy.plan.day}{day.dayIndex}{uiCopy.plan.dayUnit} · {day.isRestDay ? uiCopy.plan.rest : workoutName(day.primaryWorkoutId)}</strong>
         <span>{uiCopy.plan.status[day.status]}</span>
         <small>{uiCopy.plan.scheduledDate} {day.scheduledLocalDate}{day.originalScheduledLocalDate !== day.scheduledLocalDate
@@ -124,12 +130,12 @@ export function TrainingPlanScreen({ execution: supplied }: { execution?: Traini
               {uiCopy.plan.applyReschedule}</button>
             <button type="button" disabled={busy} onClick={() => void act((s) => s.skip(current.id))}>{uiCopy.plan.skip}</button>
           </> : null}
-          {restSwap && swappable.length ? <label>{uiCopy.plan.moveRest}
-            <select value={swapTarget} onChange={(event) => setSwapTarget(event.target.value)}>
-              <option value="">{uiCopy.plan.swapWith}</option>
-              {swappable.map((day) => <option value={day.id} key={day.id}>
-                {uiCopy.plan.day}{day.dayIndex}{uiCopy.plan.dayUnit} · {day.scheduledLocalDate}</option>)}
-            </select></label> : null}
+          {restSwap && swappable.length ? <ChoiceSelect label={uiCopy.plan.moveRest}
+            value={swapTarget} onChange={setSwapTarget} options={[
+              { value: '', label: uiCopy.plan.swapWith },
+              ...swappable.map((day) => ({ value: day.id,
+                label: `${uiCopy.plan.day}${day.dayIndex}${uiCopy.plan.dayUnit} · ${day.scheduledLocalDate}` })),
+            ]} /> : null}
           {restSwap && swapTarget ? <button type="button" disabled={busy}
             onClick={() => void act(async (s) => { await s.swapRest(restSwap.id, swapTarget); setSwapTarget('') })}>
             {uiCopy.plan.applySwap}</button> : null}
@@ -164,11 +170,12 @@ export function TrainingPlanScreen({ execution: supplied }: { execution?: Traini
         <label><input type="checkbox" checked={day.isRestDay} onChange={(event) => setDays((list) => list.map((item, i) =>
           i === index ? { ...item, isRestDay: event.target.checked, workoutId: event.target.checked ? '' : item.workoutId } : item))} />
           {uiCopy.plan.rest}</label>
-        {!day.isRestDay ? <label>{uiCopy.plan.workout}<select value={day.workoutId} onChange={(event) => setDays((list) => list.map((item, i) =>
-          i === index ? { ...item, workoutId: event.target.value } : item))}>
-          <option value="">{uiCopy.plan.chooseWorkout}</option>
-          {available.map((workout) => <option value={workout.id} key={workout.id}>{displayWorkoutTitle(workout)}</option>)}
-        </select></label> : null}
+        {!day.isRestDay ? <ChoiceSelect label={uiCopy.plan.workout} value={day.workoutId}
+          onChange={(value) => setDays((list) => list.map((item, i) =>
+            i === index ? { ...item, workoutId: value } : item))} options={[
+            { value: '', label: uiCopy.plan.chooseWorkout },
+            ...available.map((workout) => ({ value: workout.id, label: displayWorkoutTitle(workout) })),
+          ]} /> : null}
         {days.length > 1 ? <button type="button" onClick={() => setDays((list) => list.filter((_, i) => i !== index))}>
           {uiCopy.plan.removeDay}</button> : null}
       </div>)}

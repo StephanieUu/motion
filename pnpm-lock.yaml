@@ -131,6 +131,9 @@ importers:
       '@motion/integrations':
         specifier: workspace:*
         version: link:../../packages/integrations
+      '@motion/recommendation':
+        specifier: workspace:*
+        version: link:../../packages/recommendation
       react:
         specifier: 19.3.0
         version: 19.3.0

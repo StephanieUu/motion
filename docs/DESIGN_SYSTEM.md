@@ -1626,3 +1626,35 @@ When resolving a visual ambiguity, preserve this order:
 5. C impact only when the moment deserves it
 
 Do not create a new visual direction to solve an implementation shortcut.
+
+---
+
+## Art Direction 2.0 — Living Editorial Art (Accepted Extension)
+
+This extends the accepted Neo Art Nouveau + Japanese Experimental Editorial foundation, with Wabi-Sabi restraint, Soft Tech materiality, and rare Neo-Brutalist emphasis. The interface should use artistic composition to organize product information, rather than place decoration around standard app cards. Whitespace supports composition; it is not the objective on its own.
+
+### Visual grammar
+
+- Use paths, nodes, growth, branching, organic lines, decorative geometry, asymmetry, scale contrast, cropping, and edge-aligned annotations to show relationships and position.
+- Use tactile or printed-matter texture sparingly. Keep the light, clean palette; avoid aged paper, obvious grain, and ornamental clutter.
+- Reduce repeated rounded cards, progress bars, pills, success banners, and dashboard grids where a compositional structure can make the same information clearer.
+- Keep controls explicit and readable. Artwork must not obscure what is clickable, the current workout, its relationship to the plan, the user's place in the plan, or the next action.
+- Treat coral as the small semantic marker for **now / active / current user position**. It is not a general fill or default accent. Botanical green carries completion and primary action; lilac can carry rest or a surrounding current-state form.
+
+### Today reference implementation
+
+Today is the first reference for this direction; this extension does not mandate a redesign of other screens. Its primary workout title may take a stronger editorial scale, while metadata reads as a restrained annotation. Organic art may frame or cross the composition when it helps connect information. `开始训练` remains an unmistakable action.
+
+Represent a `TrainingPlanRun` as an organic path with day nodes, accompanied by the clear text facts: plan name, `第 N / M 天`, and `已完成 X / Y 次训练`. The path is a supplement, not the sole source of meaning. Use a filled deep-green node for completed training, a coral core with a restrained lilac halo for the current position, a lilac hollow node for rest, and a muted neutral node for pending. Partial completion may use a half-filled node; skipped days may use a quiet cut/strike. Keep the original plan node intact when a different workout is selected.
+
+For a planned replacement, grow a branch from the original plan path to the actual workout while retaining `推荐替换` and `原计划：...`. For extra training on Planned Rest, keep the hollow Rest node and grow a separate branch for the extra workout; retain `休息日加练` and `原计划：休息`. Neither composition should imply that the original plan day has been rewritten.
+
+ActivityType inspiration under `新的运动` may use larger editorial type and a branching composition, while `就做这个`, `去找训练`, and `再来一个` remain visually and functionally distinct. Keep `找到喜欢的训练后，分享回来` in the find/share flow. Low-priority confirmations, such as saved feedback, should be quiet inline text instead of a large success banner.
+
+Today may later vary its composition for normal training, Planned Rest, replacement, rescue, or milestones. Only existing states should drive the current implementation; future M6 behavior is not implied by this visual direction.
+
+### Bright celestial editorial application
+
+The approved `design-reference/motion-visual-target.png.png` image is the primary visual target for composition, color, and artwork density; its poster text is not product copy. Use the supplied `motion_visual_asset_kit` as the source of the celestial and botanical forms. Keep a bright ivory paper canvas, deep botanical-green text/actions, fine warm-gold rules, and small coral markers for the current state. Use serif display type for the few highest-priority titles and a clear sans-serif for controls and metadata. Avoid large gradients, dense paper textures, heavy shadows, and repeated decorative stickers.
+
+Sun, moon, stars, and orbits may frame a title or trace a plan path when they clarify hierarchy or progression. Today uses a continuous celestial-botanical field across its header and workout; Training uses a flat editorial index, with quieter derivatives for detail and plan screens. Plan status must remain legible through text as well as node shape and color. Longer choices belong in an accessible bottom sheet rather than a platform-default dropdown. This visual application changes presentation only; existing data and training behavior remain authoritative.

@@ -5,6 +5,7 @@ import { TrainingPlanRepository, type PlanRun, type PlanRunDayView } from '../..
 import { TrainingSessionRepository, type SessionFeedback } from '../../db/repositories/TrainingSessionRepository'
 import { WorkoutImportRepository } from '../../db/repositories/WorkoutImportRepository'
 import { WorkoutRepository, type LibraryWorkout } from '../../db/repositories/WorkoutRepository'
+import { RecommendationRepository } from '../../db/repositories/RecommendationRepository'
 import type { Database } from '../../db/sqlite/Database'
 import { getNativeDatabase } from '../../db/sqlite/nativeDatabase'
 
@@ -17,6 +18,7 @@ export interface ExecutionSnapshot {
   pendingWorkoutId: string | null
   mainWorkout: LibraryWorkout | null
   session: TrainingSession | null
+  selectionOrigin?: 'RECOMMENDATION' | 'MANUAL' | null
 }
 
 export class TrainingExecution {
@@ -24,12 +26,14 @@ export class TrainingExecution {
   readonly sessions: TrainingSessionRepository
   private readonly imports: WorkoutImportRepository
   private readonly workouts: WorkoutRepository
+  private readonly recommendations: RecommendationRepository
 
   constructor(db: Database, private readonly clock: () => Date = () => new Date()) {
     this.plans = new TrainingPlanRepository(db)
     this.sessions = new TrainingSessionRepository(db)
     this.imports = new WorkoutImportRepository(db)
     this.workouts = new WorkoutRepository(db)
+    this.recommendations = new RecommendationRepository(db)
   }
 
   today(): string { return localDateAtStart(this.clock()) }
@@ -47,7 +51,11 @@ export class TrainingExecution {
     const selectablePending = workouts.find((workout) => workout.id === pendingWorkoutId && workout.userVisibility !== 'ARCHIVED')
     const chosenId = session?.workoutContentId ?? selectablePending?.id ?? currentDay?.primaryWorkoutId ?? null
     const mainWorkout = workouts.find((workout) => workout.id === chosenId && workout.userVisibility !== 'ARCHIVED') ?? null
-    return { plans, run, runDays, currentDay, workouts, pendingWorkoutId: selectablePending?.id ?? null, mainWorkout, session }
+    const isRecommended = session ? await this.recommendations.sessionWasRecommended(session.id)
+      : selectablePending ? !!(await this.recommendations.acceptedForWorkout(today, selectablePending.id)) : false
+    const selectionOrigin = session || selectablePending ? isRecommended ? 'RECOMMENDATION' : 'MANUAL' : null
+    return { plans, run, runDays, currentDay, workouts, pendingWorkoutId: selectablePending?.id ?? null,
+      mainWorkout, session, selectionOrigin }
   }
 
   async createPlan(title: string, days: PlanDayInput[]): Promise<TrainingPlan> {
@@ -80,9 +88,11 @@ export class TrainingExecution {
     const planDayId = day && !day.isRestDay && day.scheduledLocalDate <= this.today()
       && snapshot.run?.status === 'ACTIVE' ? day.id : undefined
     const replacing = !!planDayId && !!workout && workout.id !== day?.primaryWorkoutId
+    const dailyRecommendationId = workout ? await this.recommendations.acceptedForWorkout(this.today(), workout.id) : null
     return this.sessions.start({ ...(workout ? { workoutContentId: workout.id } : {}),
       ...(workout?.primaryActivityTypeId ? { activityTypeId: workout.primaryActivityTypeId } : {}),
       ...(planDayId ? { trainingPlanRunDayId: planDayId } : {}),
+      ...(dailyRecommendationId ? { dailyRecommendationId } : {}),
       sessionOrigin: planDayId && !replacing ? 'PLAN' : workout?.contentKind === 'FREE_ACTIVITY'
         ? 'FREE_ACTIVITY' : 'EXISTING_LIBRARY', startedAt: this.clock() })
   }
