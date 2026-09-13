@@ -6,6 +6,17 @@
   color: var(--color-ink);
 }
 
+.training-library__plan-link {
+  display: block;
+  padding: var(--space-4);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-green-soft);
+  color: var(--color-green-deep);
+  font-weight: 700;
+  text-decoration: none;
+}
+
 .training-library .sr-only {
   position: absolute;
   width: 1px;

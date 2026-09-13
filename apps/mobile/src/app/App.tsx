@@ -8,6 +8,7 @@ import { FoodScreen } from '../features/food/FoodScreen'
 import { MeScreen } from '../features/me/MeScreen'
 import { TodayScreen } from '../features/today/TodayScreen'
 import { TrainingScreen } from '../features/training/TrainingScreen'
+import { TrainingPlanScreen } from '../features/training/TrainingPlanScreen'
 import { openTrainingLibrary, type TrainingLibrary } from '../features/training/trainingLibrary'
 import type { WorkoutImportResult } from '../db/repositories/WorkoutImportRepository'
 import type { SharedWorkoutPayload } from '@motion/integrations'
@@ -63,6 +64,7 @@ export function App({ trainingLibrary }: AppProps) {
         <Route path="/" element={<TodayScreen />} />
         <Route path="/training" element={<TrainingScreen library={trainingLibrary} importResult={importResult}
           onImportResultDismiss={() => setImportResult(null)} />} />
+        <Route path="/training/plan" element={<TrainingPlanScreen />} />
         <Route path="/food" element={<FoodScreen />} />
         <Route path="/body" element={<BodyScreen />} />
         <Route path="/me" element={<MeScreen />} />

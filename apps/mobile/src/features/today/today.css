@@ -1,0 +1,20 @@
+.today-execution { display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--color-line); border-radius: var(--radius-md); background: var(--color-surface); }
+.today-execution__confirm { gap: var(--space-2); }
+.workout-card__source { display: inline-flex; align-items: center; color: var(--color-green-deep); font-weight: 700; text-decoration: underline; text-underline-offset: .2em; }
+.today-execution h2 { font-size: 1.15rem; }
+.today-execution label { display: grid; gap: var(--space-2); }
+.today-execution input, .today-execution select { width: 100%; min-height: 2.8rem; padding: var(--space-2); border: 1px solid var(--color-line); border-radius: var(--radius-sm); background: var(--color-canvas); color: var(--color-ink); font: inherit; }
+.today-execution button { min-height: 2.8rem; padding: var(--space-2) var(--space-3); border: 1px solid var(--color-green-deep); border-radius: var(--radius-sm); background: var(--color-green-soft); color: var(--color-green-deep); font: inherit; font-weight: 700; cursor: pointer; }
+.today-execution button[aria-pressed='true'] { background: var(--color-green-deep); color: white; }
+.today-execution button:disabled { opacity: .55; cursor: wait; }
+.today-execution .today-execution__secondary { border-color: var(--color-line); background: var(--color-canvas); color: var(--color-ink-soft); }
+.today-execution__choice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.today-execution__choice > span { width: 100%; }
+.today-execution__links { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.today-execution__progress { display: grid; gap: var(--space-2); padding: var(--space-4); border: 1px solid var(--color-line); border-radius: var(--radius-md); background: var(--color-surface); }
+.today-execution__progress strong { font-size: 2rem; line-height: 1; }
+.today-execution__progress small { font-size: .85rem; color: var(--color-ink-soft); }
+.today-execution__links a { color: var(--color-green-deep); font-weight: 700; }
+.today-execution__error, .today-execution__notice { padding: var(--space-3); border-radius: var(--radius-sm); background: var(--color-coral-soft); }
+.today-execution__notice { background: var(--color-green-soft); }
+.today-execution button:focus-visible, .today-execution input:focus-visible, .today-execution select:focus-visible, .today-execution__links a:focus-visible, .workout-card__source:focus-visible { outline: 2px solid var(--color-coral); outline-offset: 3px; }

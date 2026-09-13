@@ -14,6 +14,7 @@ import { ActivityRepository } from './ActivityRepository'
 import { PreferenceRepository } from './PreferenceRepository'
 import { SqliteTrainingLibrary, parseWorkoutUrl, sourceTypeFromUrl } from '../../features/training/trainingLibrary'
 import { WorkoutImportRepository } from './WorkoutImportRepository'
+import { TrainingExecution } from '../../features/training/trainingExecution'
 
 class NodeDriver implements SqlDriver {
   constructor(readonly sqlite: DatabaseSync) {}
@@ -493,5 +494,182 @@ describe('M3 share import repository', () => {
       .workoutContentId).toBe(result.workoutContentId)
     expect((await second.db.query<{ count: number }>('SELECT COUNT(*) AS count FROM training_sessions'))[0]?.count).toBe(0)
     expect(await new WorkoutRepository(second.db).remove(result.workoutContentId)).toBe('archived')
+  })
+})
+
+describe('M4 plan and daily execution', () => {
+  it('creates a consecutive plan, shows one Today task, and records normal and partial days', async () => {
+    const { db } = await ready()
+    const first = await new WorkoutRepository(db).create({ contentKind: 'FOLLOW_ALONG', sourceType: 'BILIBILI', title: '训练一' })
+    const second = await new WorkoutRepository(db).create({ contentKind: 'FOLLOW_ALONG', sourceType: 'WEB', title: '训练二' })
+    let clock = new Date(2026, 8, 13, 12)
+    const execution = new TrainingExecution(db, () => clock)
+    const plan = await execution.createPlan('七天计划', [
+      { dayIndex: 1, items: [{ workoutContentId: first.id, role: 'PRIMARY' }] },
+      { dayIndex: 2, items: [{ workoutContentId: second.id, role: 'PRIMARY' }] },
+      { dayIndex: 3, isRestDay: true },
+      { dayIndex: 4, items: [{ workoutContentId: first.id, role: 'PRIMARY' }] },
+      { dayIndex: 5, items: [{ workoutContentId: first.id, role: 'PRIMARY' }] },
+      { dayIndex: 6, items: [{ workoutContentId: second.id, role: 'PRIMARY' }] },
+      { dayIndex: 7, isRestDay: true },
+    ])
+    expect(plan.plannedDays).toBe(7)
+    await execution.startPlan(plan.id)
+    await expect(execution.startPlan(plan.id)).rejects.toThrow()
+    let snapshot = await execution.load()
+    expect(snapshot.currentDay?.dayIndex).toBe(1)
+    expect(snapshot.mainWorkout?.id).toBe(first.id)
+    const started = await execution.startWorkout(snapshot)
+    expect((await execution.startWorkout(snapshot)).id).toBe(started.id)
+    await execution.completeWorkout(started.id, 25, 'COMPLETE')
+    expect((await execution.completeWorkout(started.id, 25, 'COMPLETE')).id).toBe(started.id)
+    expect((await execution.plans.getRunDays(snapshot.run!.id))[0]).toMatchObject({ status: 'COMPLETED', planEquivalence: 'FULL' })
+    clock = new Date(2026, 8, 14, 12)
+    snapshot = await execution.load()
+    expect(snapshot.mainWorkout?.id).toBe(second.id)
+    const partial = await execution.startWorkout(snapshot)
+    await execution.completeWorkout(partial.id, 4, 'PARTIAL')
+    expect((await execution.plans.getRunDays(snapshot.run!.id))[1]).toMatchObject({ status: 'PARTIALLY_COMPLETED', planEquivalence: 'PARTIAL' })
+    expect((await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM active_days'))[0]?.count).toBe(1)
+    expect((await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM training_sessions'))[0]?.count).toBe(2)
+  })
+
+  it('reschedules without changing original dates, skips without debt, and closes planned rest without activity', async () => {
+    const { db } = await ready()
+    const plans = new TrainingPlanRepository(db)
+    const plan = await plans.create({ title: 'Three days', sourceType: 'MANUAL', days: [
+      { dayIndex: 1 }, { dayIndex: 2, isRestDay: true }, { dayIndex: 3 },
+    ] })
+    const run = await plans.startRun(plan.id, '2026-09-13')
+    let days = await plans.getRunDayViews(run)
+    await plans.reschedule(days[0]!.id, '2026-09-14')
+    days = await plans.getRunDayViews(run)
+    expect(days.map((day) => day.scheduledLocalDate)).toEqual(['2026-09-14', '2026-09-15', '2026-09-16'])
+    expect(days[0]?.originalScheduledLocalDate).toBe('2026-09-13')
+    await plans.skip(days[0]!.id)
+    await plans.completePlannedRest(days[1]!.id, '2026-09-15')
+    expect((await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM active_days'))[0]?.count).toBe(0)
+    expect((await plans.getCurrentRun())?.currentDayIndex).toBe(3)
+    await plans.skip(days[2]!.id)
+    await plans.completeRun(run)
+    expect(await plans.getCurrentRun()).toBeNull()
+    expect((await db.query<{ status: string }>('SELECT status FROM training_plan_runs WHERE id=?', [run]))[0]?.status).toBe('COMPLETED')
+  })
+
+  it('shifts a missed day and later pending days, while pause/resume shifts without recording misses', async () => {
+    const { db } = await ready()
+    const plans = new TrainingPlanRepository(db)
+    const plan = await plans.create({ title: 'Shift', sourceType: 'MANUAL', days: [
+      { dayIndex: 1 }, { dayIndex: 2 }, { dayIndex: 3 },
+    ] })
+    const run = await plans.startRun(plan.id, '2026-09-13')
+    await plans.reconcileMissed('2026-09-15')
+    let days = await plans.getRunDayViews(run)
+    expect(days.map((day) => day.scheduledLocalDate)).toEqual(['2026-09-15', '2026-09-16', '2026-09-17'])
+    expect(days.map((day) => day.originalScheduledLocalDate)).toEqual(['2026-09-13', '2026-09-14', '2026-09-15'])
+    await plans.pause(run, new Date(2026, 8, 15, 12))
+    await plans.reconcileMissed('2026-09-18')
+    expect((await plans.getRunDayViews(run)).map((day) => day.scheduledLocalDate)).toEqual(days.map((day) => day.scheduledLocalDate))
+    await plans.resume(run, '2026-09-18')
+    days = await plans.getRunDayViews(run)
+    expect(days.map((day) => day.scheduledLocalDate)).toEqual(['2026-09-18', '2026-09-19', '2026-09-20'])
+    expect(days.every((day) => day.status === 'SCHEDULED')).toBe(true)
+    await plans.end(run)
+    expect(await plans.getCurrentRun()).toBeNull()
+  })
+
+  it('swaps a planned rest date with one workout date and keeps both original slots', async () => {
+    const { db } = await ready()
+    const plans = new TrainingPlanRepository(db)
+    const plan = await plans.create({ title: 'Swap', sourceType: 'MANUAL', days: [
+      { dayIndex: 1 }, { dayIndex: 2, isRestDay: true }, { dayIndex: 3 },
+    ] })
+    const run = await plans.startRun(plan.id, '2026-09-13')
+    const days = await plans.getRunDayViews(run)
+    await plans.swapPlannedRest(days[1]!.id, days[0]!.id)
+    const changed = await plans.getRunDayViews(run)
+    expect(changed.map((day) => day.scheduledLocalDate)).toEqual(['2026-09-14', '2026-09-13', '2026-09-15'])
+    expect((await plans.getCurrentRun())?.currentDayIndex).toBe(2)
+    expect(changed.map((day) => day.originalScheduledLocalDate)).toEqual(['2026-09-13', '2026-09-14', '2026-09-15'])
+    await plans.completePlannedRest(days[1]!.id, '2026-09-13')
+    expect((await plans.getCurrentRun())?.currentDayIndex).toBe(1)
+    await expect(plans.swapPlannedRest(days[1]!.id, days[2]!.id)).rejects.toThrow()
+  })
+
+  it.each(['FULL', 'PARTIAL', 'NONE'] as const)('records manual replacement with %s equivalence', async (equivalence) => {
+    const { db } = await ready()
+    const workouts = new WorkoutRepository(db)
+    const planned = await workouts.create({ contentKind: 'FOLLOW_ALONG', sourceType: 'MANUAL', title: '原训练' })
+    const replacement = await workouts.create({ contentKind: 'FREE_ACTIVITY', sourceType: 'MANUAL', title: '替换训练' })
+    const execution = new TrainingExecution(db, () => new Date(2026, 8, 13, 12))
+    const plan = await execution.createPlan('Replace', [{ dayIndex: 1, items: [{ workoutContentId: planned.id, role: 'PRIMARY' }] }])
+    await execution.startPlan(plan.id)
+    await execution.selectWorkout(replacement.id)
+    const snapshot = await execution.load()
+    expect(snapshot.mainWorkout?.id).toBe(replacement.id)
+    const session = await execution.startWorkout(snapshot)
+    await execution.completeWorkout(session.id, 12, 'COMPLETE', equivalence)
+    const day = (await execution.plans.getRunDayViews(snapshot.run!.id))[0]!
+    expect(day).toMatchObject({ primaryWorkoutId: planned.id, executionKind: 'REPLACEMENT', planEquivalence: equivalence })
+    expect((await execution.sessions.get(session.id))?.workoutContentId).toBe(replacement.id)
+    expect((await execution.load()).pendingWorkoutId).toBeNull()
+  })
+
+  it('uses M3 pending selection only after Start, keeps optional feedback optional, and recovers after reopen', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'motion-m4-'))
+    directories.push(directory)
+    const file = join(directory, 'motion.db')
+    const first = open(file)
+    await migrateDatabase(first.db)
+    const workout = await new WorkoutRepository(first.db).create({ contentKind: 'FOLLOW_ALONG', sourceType: 'BILIBILI' })
+    const clock = () => new Date(2026, 8, 13, 12)
+    const execution = new TrainingExecution(first.db, clock)
+    await execution.selectWorkout(workout.id)
+    expect((await first.db.query<{ count: number }>('SELECT COUNT(*) AS count FROM training_sessions'))[0]?.count).toBe(0)
+    const started = await execution.startWorkout(await execution.load())
+    first.sqlite.close(); opened.splice(opened.indexOf(first.sqlite), 1)
+    const second = open(file)
+    await migrateDatabase(second.db)
+    const reopened = new TrainingExecution(second.db, clock)
+    expect((await reopened.load()).session?.id).toBe(started.id)
+    await reopened.completeWorkout(started.id, 10, 'COMPLETE')
+    expect((await reopened.load()).pendingWorkoutId).toBeNull()
+    expect((await second.db.query<{ count: number }>('SELECT COUNT(*) AS count FROM workout_feedback'))[0]?.count).toBe(0)
+    await reopened.saveFeedback(started.id, { exertion: 'JUST_RIGHT', preference: 'LIKE' })
+    await reopened.saveFeedback(started.id, { exertion: 'EASY', preference: null })
+    expect(await reopened.sessions.getFeedback(started.id)).toEqual({ exertion: 'EASY', preference: null })
+    expect((await second.db.query<{ count: number }>('SELECT COUNT(*) AS count FROM workout_feedback'))[0]?.count).toBe(1)
+    expect((await second.db.query<{ count: number }>('SELECT COUNT(*) AS count FROM active_days'))[0]?.count).toBe(1)
+  })
+
+  it('abandons a recovered session without advancing the plan, then permits a fresh Start', async () => {
+    const { db } = await ready()
+    const workout = await new WorkoutRepository(db).create({ contentKind: 'FOLLOW_ALONG', sourceType: 'MANUAL' })
+    const execution = new TrainingExecution(db, () => new Date(2026, 8, 13, 12))
+    const plan = await execution.createPlan('Recovery', [{ dayIndex: 1, items: [{ workoutContentId: workout.id, role: 'PRIMARY' }] }])
+    await execution.startPlan(plan.id)
+    const first = await execution.startWorkout(await execution.load())
+    const recovered = new TrainingExecution(db, () => new Date(2026, 8, 13, 12))
+    expect((await recovered.load()).session?.id).toBe(first.id)
+    await recovered.abandonWorkout(first.id)
+    expect((await recovered.load()).currentDay?.status).toBe('SCHEDULED')
+    expect((await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM active_days'))[0]?.count).toBe(0)
+    const second = await recovered.startWorkout(await recovered.load())
+    expect(second.id).not.toBe(first.id)
+    expect((await db.query<{ count: number }>("SELECT COUNT(*) AS count FROM training_sessions WHERE lifecycle_status='IN_PROGRESS'"))[0]?.count).toBe(1)
+  })
+
+  it('does not advance plan or Active Day if completion transaction fails', async () => {
+    const { db, sqlite } = await ready()
+    const execution = new TrainingExecution(db, () => new Date(2026, 8, 13, 12))
+    const workout = await new WorkoutRepository(db).create({ contentKind: 'FOLLOW_ALONG', sourceType: 'MANUAL' })
+    const plan = await execution.createPlan('Atomic', [{ dayIndex: 1, items: [{ workoutContentId: workout.id, role: 'PRIMARY' }] }])
+    const run = await execution.startPlan(plan.id)
+    const session = await execution.startWorkout(await execution.load())
+    sqlite.exec("CREATE TRIGGER reject_active_day BEFORE INSERT ON active_days BEGIN SELECT RAISE(ABORT,'forced failure'); END;")
+    await expect(execution.completeWorkout(session.id, 10, 'COMPLETE')).rejects.toThrow('forced failure')
+    expect((await execution.sessions.get(session.id))?.lifecycleStatus).toBe('IN_PROGRESS')
+    expect((await execution.plans.getRunDays(run))[0]?.status).toBe('IN_PROGRESS')
+    expect(await db.query('SELECT * FROM active_days')).toEqual([])
   })
 })

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core'
+import { Link } from 'react-router-dom'
 import type { SourceType, WorkoutPreference, WorkoutVisibility } from '@motion/domain'
 import { logger } from '../../app/logger'
 import type { LibraryWorkout } from '../../db/repositories/WorkoutRepository'
@@ -278,6 +279,9 @@ export function TrainingScreen({ library: suppliedLibrary, importResult, onImpor
             </div>
             <span className="training-library__header-mark" aria-hidden="true" />
           </header>
+
+          <Link className="training-library__plan-link" to="/training/plan" state={{ from: '/training' }}>
+            {uiCopy.plan.title}</Link>
 
           <div className="training-library__views" role="group" aria-label={uiCopy.training.title}>
             {(['ACTIVE', 'TEMPORARILY_HIDDEN', 'ARCHIVED'] as WorkoutVisibility[]).map((visibility) => (

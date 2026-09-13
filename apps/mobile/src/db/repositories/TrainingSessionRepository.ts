@@ -27,6 +27,11 @@ export interface StartSession {
   userSelectedLocalDate?: string
 }
 
+export interface SessionFeedback {
+  exertion: 'EASY' | 'JUST_RIGHT' | 'HARD' | null
+  preference: 'LOVE' | 'LIKE' | 'NEUTRAL' | 'DISLIKE' | null
+}
+
 export class TrainingSessionRepository {
   constructor(private readonly db: Database) {}
 
@@ -45,9 +50,16 @@ export class TrainingSessionRepository {
     const localDate = input.userSelectedLocalDate ?? localDateAtStart(started)
     addLocalDays(localDate, 0)
     const id = crypto.randomUUID()
-    await this.db.transaction(async (tx) => {
-      const ongoing = await tx.query<{ id: string }>("SELECT id FROM training_sessions WHERE lifecycle_status='IN_PROGRESS' LIMIT 1")
-      if (ongoing[0]) throw new Error(`Resume or abandon session ${ongoing[0].id} before starting another`)
+    const sessionId = await this.db.transaction(async (tx) => {
+      const ongoing = await tx.query<SessionRow & { session_origin: string }>(
+        "SELECT * FROM training_sessions WHERE lifecycle_status='IN_PROGRESS' LIMIT 1")
+      if (ongoing[0]) {
+        const same = ongoing[0].training_plan_run_day_id === (input.trainingPlanRunDayId ?? null)
+          && ongoing[0].workout_content_id === (input.workoutContentId ?? null)
+          && ongoing[0].session_origin === input.sessionOrigin
+        if (same) return ongoing[0].id
+        throw new Error(`Resume or abandon session ${ongoing[0].id} before starting another`)
+      }
       if (input.trainingPlanRunDayId) {
         const runDay = await tx.query<{ status: string; run_status: string }>(`SELECT rd.status, r.status AS run_status FROM training_plan_run_days rd
           JOIN training_plan_runs r ON r.id=rd.training_plan_run_id WHERE rd.id=?`, [input.trainingPlanRunDayId])
@@ -62,8 +74,9 @@ export class TrainingSessionRepository {
         input.workoutContentId ?? null, input.activityTypeId ?? null, input.trainingPlanRunDayId ?? null,
         input.miniRoutineVersionId ?? null, input.sessionOrigin, new Date().toISOString(), new Date().toISOString()])
       await rebuildTrainingState(tx, [localDate], input.trainingPlanRunDayId ? [input.trainingPlanRunDayId] : [])
+      return id
     })
-    return (await this.get(id))!
+    return (await this.get(sessionId))!
   }
 
   async complete(id: string, input: { durationMinutes: number; completionStatus: CompletionStatus;
@@ -88,6 +101,10 @@ export class TrainingSessionRepository {
       if (session.training_plan_run_day_id && input.planEquivalence) {
         await tx.run('UPDATE training_plan_run_days SET plan_equivalence=? WHERE id=?', [input.planEquivalence, session.training_plan_run_day_id])
       }
+      if (session.workout_content_id) {
+        await tx.run('DELETE FROM today_pending_selections WHERE local_date=? AND workout_content_id=?',
+          [session.local_date, session.workout_content_id])
+      }
       await rebuildTrainingState(tx, [session.local_date], session.training_plan_run_day_id ? [session.training_plan_run_day_id] : [])
       return fromRow((await tx.query<SessionRow>('SELECT * FROM training_sessions WHERE id=?', [id]))[0]!)
     })
@@ -105,6 +122,25 @@ export class TrainingSessionRepository {
       await rebuildTrainingState(tx, [session.local_date], session.training_plan_run_day_id ? [session.training_plan_run_day_id] : [])
       return fromRow((await tx.query<SessionRow>('SELECT * FROM training_sessions WHERE id=?', [id]))[0]!)
     })
+  }
+
+  async saveFeedback(id: string, feedback: SessionFeedback): Promise<void> {
+    if (!feedback.exertion && !feedback.preference) return
+    await this.db.transaction(async (tx) => {
+      const session = (await tx.query<{ lifecycle_status: string }>(
+        'SELECT lifecycle_status FROM training_sessions WHERE id=?', [id]))[0]
+      if (session?.lifecycle_status !== 'COMPLETED') throw new Error('Feedback requires a completed session')
+      await tx.run(`INSERT INTO workout_feedback (id,training_session_id,exertion,preference,created_at)
+        VALUES (?,?,?,?,?) ON CONFLICT(training_session_id) DO UPDATE SET
+        exertion=excluded.exertion,preference=excluded.preference`,
+      [crypto.randomUUID(), id, feedback.exertion, feedback.preference, new Date().toISOString()])
+    })
+  }
+
+  async getFeedback(id: string): Promise<SessionFeedback | null> {
+    const row = (await this.db.query<{ exertion: SessionFeedback['exertion']; preference: SessionFeedback['preference'] }>(
+      'SELECT exertion,preference FROM workout_feedback WHERE training_session_id=?', [id]))[0]
+    return row ? { exertion: row.exertion, preference: row.preference } : null
   }
 
   async correctCompleted(id: string, changes: { localDate?: string; durationMinutes?: number }): Promise<TrainingSession> {

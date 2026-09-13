@@ -5,8 +5,41 @@ import { rebuildTrainingState } from './rebuildTrainingState'
 interface PlanRow extends SqlRow { id: string; title: string; source_type: SourceType; planned_days: number; created_at: string }
 interface RunDayRow extends SqlRow {
   id: string; training_plan_run_id: string; training_plan_day_id: string; scheduled_local_date: string
+  original_scheduled_local_date: string
   status: TrainingPlanRunDay['status']; execution_kind: TrainingPlanRunDay['executionKind']
   plan_equivalence: TrainingPlanRunDay['planEquivalence']; reschedule_count: number
+  day_index?: number; title?: string | null; is_rest_day?: number; workout_content_id?: string | null
+}
+
+export interface PlanRun {
+  id: string; trainingPlanId: string; startedOn: string
+  status: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ABANDONED'
+  currentDayIndex: number | null; pausedAt: string | null
+}
+
+export interface PlanDayView {
+  id: string; dayIndex: number; title: string | null; isRestDay: boolean; primaryWorkoutId: string | null
+}
+
+export interface PlanRunDayView extends TrainingPlanRunDay {
+  originalScheduledLocalDate: string; dayIndex: number; title: string | null
+  isRestDay: boolean; primaryWorkoutId: string | null
+}
+
+function dayDifference(from: string, to: string): number {
+  addLocalDays(from, 0); addLocalDays(to, 0)
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000)
+}
+
+async function shiftPending(tx: SqlAccess, runId: string, from: string, delta: number): Promise<void> {
+  if (delta <= 0) return
+  const pending = await tx.query<RunDayRow>(`SELECT * FROM training_plan_run_days WHERE training_plan_run_id=?
+    AND scheduled_local_date>=? AND status='SCHEDULED' ORDER BY scheduled_local_date DESC`, [runId, from])
+  const now = new Date().toISOString()
+  for (const item of pending) {
+    await tx.run('UPDATE training_plan_run_days SET scheduled_local_date=?,reschedule_count=reschedule_count+1,updated_at=? WHERE id=?',
+      [addLocalDays(item.scheduled_local_date, delta), now, item.id])
+  }
 }
 
 function toRunDay(row: RunDayRow): TrainingPlanRunDay {
@@ -19,7 +52,7 @@ function toRunDay(row: RunDayRow): TrainingPlanRunDay {
 export async function refreshRunProgress(tx: SqlAccess, runId: string): Promise<void> {
   const pending = await tx.query<{ day_index: number }>(
     `SELECT pd.day_index FROM training_plan_run_days rd JOIN training_plan_days pd ON pd.id=rd.training_plan_day_id
-     WHERE rd.training_plan_run_id=? AND rd.status IN ('SCHEDULED','IN_PROGRESS') ORDER BY pd.day_index LIMIT 1`, [runId])
+     WHERE rd.training_plan_run_id=? AND rd.status IN ('SCHEDULED','IN_PROGRESS') ORDER BY rd.scheduled_local_date LIMIT 1`, [runId])
   await tx.run('UPDATE training_plan_runs SET current_day_index=? WHERE id=?', [pending[0]?.day_index ?? null, runId])
 }
 
@@ -55,6 +88,29 @@ export class TrainingPlanRepository {
     return row ? { id: row.id, title: row.title, sourceType: row.source_type, plannedDays: row.planned_days, createdAt: row.created_at } : null
   }
 
+  async listPlans(): Promise<TrainingPlan[]> {
+    const rows = await this.db.query<PlanRow>('SELECT * FROM training_plans WHERE is_archived=0 ORDER BY created_at DESC')
+    return rows.map((row) => ({ id: row.id, title: row.title, sourceType: row.source_type,
+      plannedDays: row.planned_days, createdAt: row.created_at }))
+  }
+
+  async getPlanDays(planId: string): Promise<PlanDayView[]> {
+    const rows = await this.db.query<{ id: string; day_index: number; title: string | null;
+      is_rest_day: number; workout_content_id: string | null }>(`SELECT pd.*,
+      (SELECT workout_content_id FROM training_plan_day_items WHERE training_plan_day_id=pd.id AND role='PRIMARY') AS workout_content_id
+      FROM training_plan_days pd WHERE training_plan_id=? ORDER BY day_index`, [planId])
+    return rows.map((row) => ({ id: row.id, dayIndex: row.day_index, title: row.title,
+      isRestDay: row.is_rest_day === 1, primaryWorkoutId: row.workout_content_id }))
+  }
+
+  async getCurrentRun(): Promise<PlanRun | null> {
+    const row = (await this.db.query<{ id: string; training_plan_id: string; started_on: string;
+      status: PlanRun['status']; current_day_index: number | null; paused_at: string | null }>(
+      "SELECT * FROM training_plan_runs WHERE status IN ('ACTIVE','PAUSED') LIMIT 1"))[0]
+    return row ? { id: row.id, trainingPlanId: row.training_plan_id, startedOn: row.started_on,
+      status: row.status, currentDayIndex: row.current_day_index, pausedAt: row.paused_at } : null
+  }
+
   async startRun(planId: string, startedOn: string): Promise<string> {
     addLocalDays(startedOn, 0)
     const id = crypto.randomUUID()
@@ -78,6 +134,109 @@ export class TrainingPlanRepository {
     return rows.map(toRunDay)
   }
 
+  async getRunDayViews(runId: string): Promise<PlanRunDayView[]> {
+    const rows = await this.db.query<RunDayRow>(`SELECT rd.*,pd.day_index,pd.title,pd.is_rest_day,
+      (SELECT workout_content_id FROM training_plan_day_items WHERE training_plan_day_id=pd.id AND role='PRIMARY') AS workout_content_id
+      FROM training_plan_run_days rd JOIN training_plan_days pd ON pd.id=rd.training_plan_day_id
+      WHERE rd.training_plan_run_id=? ORDER BY pd.day_index`, [runId])
+    return rows.map((row) => ({ ...toRunDay(row), originalScheduledLocalDate: row.original_scheduled_local_date,
+      dayIndex: row.day_index!, title: row.title ?? null, isRestDay: row.is_rest_day === 1,
+      primaryWorkoutId: row.workout_content_id ?? null }))
+  }
+
+  async reconcileMissed(today: string): Promise<void> {
+    addLocalDays(today, 0)
+    await this.db.transaction(async (tx) => {
+      const run = (await tx.query<{ id: string }>("SELECT id FROM training_plan_runs WHERE status='ACTIVE' LIMIT 1"))[0]
+      if (!run) return
+      const days = await tx.query<RunDayRow>(`SELECT rd.*,pd.day_index,pd.is_rest_day FROM training_plan_run_days rd
+        JOIN training_plan_days pd ON pd.id=rd.training_plan_day_id WHERE rd.training_plan_run_id=?
+        AND rd.status IN ('SCHEDULED','IN_PROGRESS') ORDER BY rd.scheduled_local_date`, [run.id])
+      for (const day of days) {
+        if (day.status === 'IN_PROGRESS' || day.scheduled_local_date >= today) break
+        if (day.is_rest_day === 1) {
+          const now = new Date().toISOString()
+          await tx.run("UPDATE training_plan_run_days SET status='PLANNED_REST',completed_at=?,updated_at=? WHERE id=?", [now, now, day.id])
+          await rebuildTrainingState(tx, [], [day.id])
+        } else {
+          await shiftPending(tx, run.id, day.scheduled_local_date, dayDifference(day.scheduled_local_date, today))
+          break
+        }
+      }
+      await refreshRunProgress(tx, run.id)
+    })
+  }
+
+  async pause(runId: string, pausedAt = new Date()): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const active = await tx.query<{ status: string }>('SELECT status FROM training_plan_runs WHERE id=?', [runId])
+      if (active[0]?.status === 'PAUSED') return
+      if (active[0]?.status !== 'ACTIVE') throw new Error('Active plan run not found')
+      const ongoing = await tx.query<{ id: string }>(`SELECT s.id FROM training_sessions s JOIN training_plan_run_days rd
+        ON rd.id=s.training_plan_run_day_id WHERE rd.training_plan_run_id=? AND s.lifecycle_status='IN_PROGRESS'`, [runId])
+      if (ongoing.length) throw new Error('Finish or abandon the active session before pausing')
+      await tx.run("UPDATE training_plan_runs SET status='PAUSED',paused_at=? WHERE id=?", [pausedAt.toISOString(), runId])
+    })
+  }
+
+  async resume(runId: string, resumedOn: string): Promise<void> {
+    addLocalDays(resumedOn, 0)
+    await this.db.transaction(async (tx) => {
+      const run = (await tx.query<{ status: string; paused_at: string | null }>(
+        'SELECT status,paused_at FROM training_plan_runs WHERE id=?', [runId]))[0]
+      if (run?.status === 'ACTIVE') return
+      if (run?.status !== 'PAUSED' || !run.paused_at) throw new Error('Paused plan run not found')
+      const pauseDate = new Date(run.paused_at)
+      const from = `${pauseDate.getFullYear()}-${String(pauseDate.getMonth()+1).padStart(2,'0')}-${String(pauseDate.getDate()).padStart(2,'0')}`
+      const delta = Math.max(0, dayDifference(from, resumedOn))
+      const pending = await tx.query<{ scheduled_local_date: string }>(`SELECT scheduled_local_date FROM training_plan_run_days
+        WHERE training_plan_run_id=? AND status='SCHEDULED' ORDER BY scheduled_local_date LIMIT 1`, [runId])
+      if (pending[0]) await shiftPending(tx, runId, pending[0].scheduled_local_date, delta)
+      await tx.run("UPDATE training_plan_runs SET status='ACTIVE',paused_at=NULL WHERE id=?", [runId])
+    })
+  }
+
+  async end(runId: string): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const ongoing = await tx.query<{ id: string }>(`SELECT s.id FROM training_sessions s JOIN training_plan_run_days rd
+        ON rd.id=s.training_plan_run_day_id WHERE rd.training_plan_run_id=? AND s.lifecycle_status='IN_PROGRESS'`, [runId])
+      if (ongoing.length) throw new Error('Finish or abandon the active session before ending')
+      await tx.run("UPDATE training_plan_runs SET status='ABANDONED',ended_reason='USER_ENDED',paused_at=NULL WHERE id=? AND status IN ('ACTIVE','PAUSED')", [runId])
+    })
+  }
+
+  async completeRun(runId: string): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const run = (await tx.query<{ status: string }>('SELECT status FROM training_plan_runs WHERE id=?', [runId]))[0]
+      if (run?.status === 'COMPLETED') return
+      if (run?.status !== 'ACTIVE') throw new Error('Active plan run not found')
+      const pending = await tx.query<{ id: string }>("SELECT id FROM training_plan_run_days WHERE training_plan_run_id=? AND status IN ('SCHEDULED','IN_PROGRESS') LIMIT 1", [runId])
+      if (pending.length) throw new Error('Plan run has unfinished days')
+      await tx.run("UPDATE training_plan_runs SET status='COMPLETED',completed_at=?,current_day_index=NULL WHERE id=?", [new Date().toISOString(), runId])
+    })
+  }
+
+  async swapPlannedRest(restId: string, otherId: string): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const rows = await tx.query<RunDayRow>(`SELECT rd.*,pd.is_rest_day FROM training_plan_run_days rd
+        JOIN training_plan_days pd ON pd.id=rd.training_plan_day_id
+        JOIN training_plan_runs r ON r.id=rd.training_plan_run_id
+        WHERE rd.id IN (?,?) AND r.status='ACTIVE'`, [restId, otherId])
+      const rest = rows.find((row) => row.id === restId)
+      const other = rows.find((row) => row.id === otherId)
+      if (!rest || !other || rest.training_plan_run_id !== other.training_plan_run_id ||
+        rest.is_rest_day !== 1 || other.is_rest_day !== 0 || rest.status !== 'SCHEDULED' || other.status !== 'SCHEDULED') {
+        throw new Error('Two pending days in one active run are required')
+      }
+      const temp = `swap-${crypto.randomUUID()}`
+      const now = new Date().toISOString()
+      await tx.run('UPDATE training_plan_run_days SET scheduled_local_date=? WHERE id=?', [temp, restId])
+      await tx.run('UPDATE training_plan_run_days SET scheduled_local_date=?,reschedule_count=reschedule_count+1,updated_at=? WHERE id=?', [rest.scheduled_local_date, now, otherId])
+      await tx.run('UPDATE training_plan_run_days SET scheduled_local_date=?,reschedule_count=reschedule_count+1,updated_at=? WHERE id=?', [other.scheduled_local_date, now, restId])
+      await refreshRunProgress(tx, rest.training_plan_run_id)
+    })
+  }
+
   async reschedule(runDayId: string, newDate: string): Promise<void> {
     addLocalDays(newDate, 0)
     await this.db.transaction(async (tx) => {
@@ -86,15 +245,10 @@ export class TrainingPlanRepository {
       const day = rows[0]
       if (!day || day.status !== 'SCHEDULED') throw new Error('Only a scheduled day in an active run can move')
       await this.assertCurrent(tx, day)
-      const delta = Math.round((Date.parse(`${newDate}T00:00:00Z`) - Date.parse(`${day.scheduled_local_date}T00:00:00Z`)) / 86400000)
+      const delta = dayDifference(day.scheduled_local_date, newDate)
       if (delta < 0) throw new Error('M1 rescheduling moves a day forward')
       if (delta === 0) return
-      const pending = await tx.query<RunDayRow>(`SELECT * FROM training_plan_run_days WHERE training_plan_run_id=?
-        AND scheduled_local_date>=? AND status='SCHEDULED' ORDER BY scheduled_local_date DESC`, [day.training_plan_run_id, day.scheduled_local_date])
-      for (const item of pending) {
-        await tx.run('UPDATE training_plan_run_days SET scheduled_local_date=?, reschedule_count=reschedule_count+1, updated_at=? WHERE id=?',
-          [addLocalDays(item.scheduled_local_date, delta), new Date().toISOString(), item.id])
-      }
+      await shiftPending(tx, day.training_plan_run_id, day.scheduled_local_date, delta)
     })
   }
 
@@ -133,7 +287,7 @@ export class TrainingPlanRepository {
     const current = await tx.query<{ id: string }>(`SELECT rd.id FROM training_plan_run_days rd
       JOIN training_plan_days pd ON pd.id=rd.training_plan_day_id
       WHERE rd.training_plan_run_id=? AND rd.status IN ('SCHEDULED','IN_PROGRESS')
-      ORDER BY pd.day_index LIMIT 1`, [day.training_plan_run_id])
+      ORDER BY rd.scheduled_local_date LIMIT 1`, [day.training_plan_run_id])
     if (current[0]?.id !== day.id) throw new Error('Only the current run-day can advance')
   }
 }

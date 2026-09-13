@@ -1,4 +1,6 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, render as renderBase, screen, waitFor, within } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { Capacitor } from '@capacitor/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -6,6 +8,8 @@ import type { LibraryWorkout } from '../../db/repositories/WorkoutRepository'
 import { uiCopy } from '../../locales'
 import { TrainingScreen } from './TrainingScreen'
 import type { TrainingLibrary } from './trainingLibrary'
+
+const render = (ui: ReactElement) => renderBase(<MemoryRouter>{ui}</MemoryRouter>)
 
 const nativeBack = vi.hoisted(() => ({ listener: null as (() => void) | null }))
 vi.mock('@capacitor/app', () => ({
