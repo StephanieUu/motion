@@ -2,10 +2,12 @@ import { Capacitor } from '@capacitor/core'
 import { localDateAtStart, type CompletionStatus, type PlanDayInput, type PlanEquivalence,
   type TrainingPlan, type TrainingSession } from '@motion/domain'
 import { TrainingPlanRepository, type PlanRun, type PlanRunDayView } from '../../db/repositories/TrainingPlanRepository'
-import { TrainingSessionRepository, type SessionFeedback } from '../../db/repositories/TrainingSessionRepository'
+import { TrainingSessionRepository, type CompletedSessionRecord,
+  type SessionFeedback } from '../../db/repositories/TrainingSessionRepository'
 import { WorkoutImportRepository } from '../../db/repositories/WorkoutImportRepository'
 import { WorkoutRepository, type LibraryWorkout } from '../../db/repositories/WorkoutRepository'
 import { RecommendationRepository } from '../../db/repositories/RecommendationRepository'
+import { MiniRoutineRepository, type MiniRoutineVersion } from '../../db/repositories/MiniRoutineRepository'
 import type { Database } from '../../db/sqlite/Database'
 import { getNativeDatabase } from '../../db/sqlite/nativeDatabase'
 
@@ -18,12 +20,15 @@ export interface ExecutionSnapshot {
   pendingWorkoutId: string | null
   mainWorkout: LibraryWorkout | null
   session: TrainingSession | null
+  completedActivities?: CompletedSessionRecord[]
+  miniRoutine?: MiniRoutineVersion | null
   selectionOrigin?: 'RECOMMENDATION' | 'MANUAL' | null
 }
 
 export class TrainingExecution {
   readonly plans: TrainingPlanRepository
   readonly sessions: TrainingSessionRepository
+  readonly miniRoutines: MiniRoutineRepository
   private readonly imports: WorkoutImportRepository
   private readonly workouts: WorkoutRepository
   private readonly recommendations: RecommendationRepository
@@ -31,6 +36,7 @@ export class TrainingExecution {
   constructor(db: Database, private readonly clock: () => Date = () => new Date()) {
     this.plans = new TrainingPlanRepository(db)
     this.sessions = new TrainingSessionRepository(db)
+    this.miniRoutines = new MiniRoutineRepository(db)
     this.imports = new WorkoutImportRepository(db)
     this.workouts = new WorkoutRepository(db)
     this.recommendations = new RecommendationRepository(db)
@@ -41,9 +47,9 @@ export class TrainingExecution {
   async load(): Promise<ExecutionSnapshot> {
     const today = this.today()
     await this.plans.reconcileMissed(today)
-    const [plans, run, workouts, pendingWorkoutId, session] = await Promise.all([
+    const [plans, run, workouts, pendingWorkoutId, session, completedActivities] = await Promise.all([
       this.plans.listPlans(), this.plans.getCurrentRun(), this.workouts.listLibrary(),
-      this.imports.pendingToday(today), this.sessions.getInProgress(),
+      this.imports.pendingToday(today), this.sessions.getInProgress(), this.sessions.listCompletedOn(today),
     ])
     const runDays = run ? await this.plans.getRunDayViews(run.id) : []
     const currentDay = [...runDays].filter((day) => day.status === 'SCHEDULED' || day.status === 'IN_PROGRESS')
@@ -54,8 +60,9 @@ export class TrainingExecution {
     const isRecommended = session ? await this.recommendations.sessionWasRecommended(session.id)
       : selectablePending ? !!(await this.recommendations.acceptedForWorkout(today, selectablePending.id)) : false
     const selectionOrigin = session || selectablePending ? isRecommended ? 'RECOMMENDATION' : 'MANUAL' : null
+    const miniRoutine = session?.miniRoutineVersionId ? await this.miniRoutines.get(session.miniRoutineVersionId) : null
     return { plans, run, runDays, currentDay, workouts, pendingWorkoutId: selectablePending?.id ?? null,
-      mainWorkout, session, selectionOrigin }
+      mainWorkout, session, miniRoutine, selectionOrigin, completedActivities }
   }
 
   async createPlan(title: string, days: PlanDayInput[]): Promise<TrainingPlan> {
@@ -89,12 +96,35 @@ export class TrainingExecution {
       && snapshot.run?.status === 'ACTIVE' ? day.id : undefined
     const replacing = !!planDayId && !!workout && workout.id !== day?.primaryWorkoutId
     const dailyRecommendationId = workout ? await this.recommendations.acceptedForWorkout(this.today(), workout.id) : null
+    const latestRecommendation = dailyRecommendationId ? await this.recommendations.latest(this.today()) : null
+    const isRescue = latestRecommendation?.id === dailyRecommendationId
+      && latestRecommendation.recommendationSource === 'RESCUE'
     return this.sessions.start({ ...(workout ? { workoutContentId: workout.id } : {}),
       ...(workout?.primaryActivityTypeId ? { activityTypeId: workout.primaryActivityTypeId } : {}),
       ...(planDayId ? { trainingPlanRunDayId: planDayId } : {}),
       ...(dailyRecommendationId ? { dailyRecommendationId } : {}),
-      sessionOrigin: planDayId && !replacing ? 'PLAN' : workout?.contentKind === 'FREE_ACTIVITY'
-        ? 'FREE_ACTIVITY' : 'EXISTING_LIBRARY', startedAt: this.clock() })
+      sessionOrigin: isRescue ? 'RESCUE' : planDayId && !replacing ? 'PLAN'
+        : workout?.contentKind === 'FREE_ACTIVITY' ? 'FREE_ACTIVITY' : 'EXISTING_LIBRARY', startedAt: this.clock() })
+  }
+
+  async startMiniRoutine(): Promise<TrainingSession> {
+    const ongoing = await this.sessions.getInProgress()
+    if (ongoing) throw new Error('Finish the current session first')
+    const version = await this.miniRoutines.create(this.clock().getDate(), 5)
+    return this.sessions.start({ workoutContentId: version.workoutContentId,
+      miniRoutineVersionId: version.id, sessionOrigin: 'RESCUE', startedAt: this.clock() })
+  }
+
+  async completeMiniRoutine(sessionId: string, allRequiredConfirmed: boolean): Promise<TrainingSession> {
+    const session = await this.sessions.get(sessionId)
+    if (!session?.miniRoutineVersionId) throw new Error('Mini Routine session not found')
+    const version = await this.miniRoutines.get(session.miniRoutineVersionId)
+    if (!version) throw new Error('Mini Routine version not found')
+    const endedAt = this.clock()
+    const durationMinutes = Math.max(0, (endedAt.getTime() - Date.parse(session.startedAt)) / 60000)
+    return this.sessions.complete(sessionId, { durationMinutes,
+      completionStatus: allRequiredConfirmed ? 'COMPLETE' : 'PARTIAL',
+      requiredMiniRoutineItemsConfirmed: allRequiredConfirmed, endedAt })
   }
 
   async completeWorkout(sessionId: string, durationMinutes: number, completionStatus: CompletionStatus,

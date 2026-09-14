@@ -3,6 +3,7 @@ import seedActivityTypes from './002_seed_activity_types.sql?raw'
 import zhCnDefaultLocale from './003_zh_cn_default_locale.sql?raw'
 import workoutPreferences from './004_workout_preferences.sql?raw'
 import pendingTodaySelection from './005_pending_today_selection.sql?raw'
+import rescuePreferences from './006_rescue_preferences.sql?raw'
 import type { Database, SqlAccess } from '../sqlite/Database'
 
 export interface Migration {
@@ -16,6 +17,7 @@ export const migrations: readonly Migration[] = [
   { version: 3, sql: zhCnDefaultLocale },
   { version: 4, sql: workoutPreferences },
   { version: 5, sql: pendingTodaySelection },
+  { version: 6, sql: rescuePreferences },
 ]
 
 export async function migrateDatabase(db: Database, steps: readonly Migration[] = migrations): Promise<number> {

@@ -59,6 +59,7 @@ export interface TrainingSession {
   workoutContentId: string | null
   activityTypeId: string | null
   trainingPlanRunDayId: string | null
+  miniRoutineVersionId?: string | null
   lifecycleStatus: 'IN_PROGRESS' | 'COMPLETED' | 'ABANDONED'
   completionStatus: CompletionStatus | null
   qualifiesForActiveDay: boolean

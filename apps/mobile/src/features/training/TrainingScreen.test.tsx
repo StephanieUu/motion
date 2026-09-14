@@ -1,6 +1,6 @@
 import { act, render as renderBase, screen, waitFor, within } from '@testing-library/react'
 import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { Capacitor } from '@capacitor/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -8,6 +8,7 @@ import type { LibraryWorkout } from '../../db/repositories/WorkoutRepository'
 import { uiCopy } from '../../locales'
 import { TrainingScreen } from './TrainingScreen'
 import type { TrainingLibrary } from './trainingLibrary'
+import type { TrainingExecution } from './trainingExecution'
 
 const render = (ui: ReactElement) => renderBase(<MemoryRouter>{ui}</MemoryRouter>)
 
@@ -81,6 +82,44 @@ function fakeLibrary(initial: LibraryWorkout[] = []) {
 }
 
 describe('M2 Training screen', () => {
+  it('offers a voluntary Mini Routine and starts the existing execution flow on Today', async () => {
+    const startMiniRoutine = vi.fn(async () => ({ id: 'mini-session' }))
+    const startWorkout = vi.fn()
+    const execution = { startMiniRoutine, startWorkout } as unknown as TrainingExecution
+    renderBase(<MemoryRouter initialEntries={['/training']}><Routes>
+      <Route path="/training" element={<TrainingScreen library={fakeLibrary()} execution={execution} />} />
+      <Route path="/" element={<p>Today execution</p>} />
+    </Routes></MemoryRouter>)
+    const quickStart = await screen.findByRole('region', { name: uiCopy.training.quickStart })
+    expect(within(quickStart).getByText(uiCopy.training.quickMiniRoutine)).toBeVisible()
+    expect(within(quickStart).getByText(uiCopy.training.quickMiniDuration)).toBeVisible()
+    await userEvent.setup().click(within(quickStart).getByRole('button', { name: uiCopy.training.quickMiniStart }))
+    await waitFor(() => expect(startMiniRoutine).toHaveBeenCalledOnce())
+    expect(startWorkout).not.toHaveBeenCalled()
+    expect(await screen.findByText('Today execution')).toBeVisible()
+  })
+
+  it('formats a composed Mini Routine duration without changing its stored precision on an unrelated edit', async () => {
+    const user = userEvent.setup()
+    const minutes = 3.9166666666666665
+    const mini = workout('mini', { title: '轻量动作', contentKind: 'MINI_ROUTINE',
+      sourceType: 'APP_BUILTIN', durationMinutes: minutes })
+    const library = fakeLibrary([mini])
+    const update = vi.spyOn(library, 'update')
+    render(<TrainingScreen library={library} />)
+    const card = await screen.findByRole('button', { name: /轻量动作/ })
+    expect(card).toHaveTextContent('约 4 分钟')
+    expect(screen.queryByText(String(minutes))).not.toBeInTheDocument()
+    await user.click(card)
+    expect(screen.getByText('约 4 分钟')).toBeVisible()
+    expect(screen.getAllByText(uiCopy.training.sources.APP_BUILTIN).length).toBeGreaterThan(0)
+    await user.click(screen.getByRole('button', { name: uiCopy.training.edit }))
+    expect(screen.getByLabelText(uiCopy.training.duration)).toHaveValue(4)
+    expect(screen.queryByDisplayValue(String(minutes))).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: uiCopy.training.save }))
+    expect(update).toHaveBeenCalledWith('mini', expect.objectContaining({ durationMinutes: minutes }))
+  })
+
   it('offers today selection for manual URL and Free Activity workouts', async () => {
     const user = userEvent.setup()
     render(<TrainingScreen library={fakeLibrary()} />)

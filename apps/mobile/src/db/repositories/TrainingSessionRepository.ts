@@ -7,13 +7,21 @@ interface SessionRow extends SqlRow {
   duration_minutes: number | null; workout_content_id: string | null; activity_type_id: string | null
   training_plan_run_day_id: string | null; lifecycle_status: TrainingSession['lifecycleStatus']
   daily_recommendation_id: string | null
+  mini_routine_version_id: string | null
   completion_status: CompletionStatus | null; qualifies_for_active_day: number
+}
+
+export interface CompletedSessionRecord {
+  session: TrainingSession
+  origin: StartSession['sessionOrigin']
+  recommendationSource: 'PLAN' | 'LIBRARY' | 'EXPLORATION' | 'RESCUE' | 'FREE_ACTIVITY' | null
 }
 
 function fromRow(row: SessionRow): TrainingSession {
   return { id: row.id, localDate: row.local_date, startedAt: row.started_at, endedAt: row.ended_at,
     durationMinutes: row.duration_minutes, workoutContentId: row.workout_content_id,
     activityTypeId: row.activity_type_id, trainingPlanRunDayId: row.training_plan_run_day_id,
+    miniRoutineVersionId: row.mini_routine_version_id,
     lifecycleStatus: row.lifecycle_status, completionStatus: row.completion_status,
     qualifiesForActiveDay: row.qualifies_for_active_day === 1 }
 }
@@ -47,6 +55,16 @@ export class TrainingSessionRepository {
     return rows[0] ? fromRow(rows[0]) : null
   }
 
+  async listCompletedOn(localDate: string): Promise<CompletedSessionRecord[]> {
+    const rows = await this.db.query<SessionRow & { session_origin: StartSession['sessionOrigin'];
+      recommendation_source: CompletedSessionRecord['recommendationSource'] }>(`SELECT ts.*, dr.recommendation_source
+      FROM training_sessions ts LEFT JOIN daily_recommendations dr ON dr.id=ts.daily_recommendation_id
+      WHERE ts.local_date=? AND ts.lifecycle_status='COMPLETED'
+      ORDER BY ts.ended_at DESC, ts.id DESC`, [localDate])
+    return rows.map((row) => ({ session: fromRow(row), origin: row.session_origin,
+      recommendationSource: row.recommendation_source }))
+  }
+
   async start(input: StartSession): Promise<TrainingSession> {
     const started = input.startedAt ?? new Date()
     const localDate = input.userSelectedLocalDate ?? localDateAtStart(started)
@@ -58,6 +76,7 @@ export class TrainingSessionRepository {
       if (ongoing[0]) {
         const same = ongoing[0].training_plan_run_day_id === (input.trainingPlanRunDayId ?? null)
           && ongoing[0].workout_content_id === (input.workoutContentId ?? null)
+          && ongoing[0].mini_routine_version_id === (input.miniRoutineVersionId ?? null)
           && ongoing[0].session_origin === input.sessionOrigin
         if (same) return ongoing[0].id
         throw new Error(`Resume or abandon session ${ongoing[0].id} before starting another`)
@@ -86,6 +105,7 @@ export class TrainingSessionRepository {
       await rebuildTrainingState(tx, [localDate], input.trainingPlanRunDayId ? [input.trainingPlanRunDayId] : [])
       return id
     })
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('motion:training-changed'))
     return (await this.get(sessionId))!
   }
 
@@ -93,7 +113,7 @@ export class TrainingSessionRepository {
     activityTypeId?: string; requiredMiniRoutineItemsConfirmed?: boolean; planEquivalence?: PlanEquivalence;
     endedAt?: Date }): Promise<TrainingSession> {
     if (!Number.isFinite(input.durationMinutes) || input.durationMinutes < 0) throw new Error('Invalid duration')
-    return this.db.transaction(async (tx) => {
+    const completed = await this.db.transaction(async (tx) => {
       const rows = await tx.query<SessionRow & { mini_routine_version_id: string | null }>('SELECT * FROM training_sessions WHERE id=?', [id])
       const session = rows[0]
       if (!session) throw new Error('Session not found')
@@ -121,10 +141,12 @@ export class TrainingSessionRepository {
       await rebuildTrainingState(tx, [session.local_date], session.training_plan_run_day_id ? [session.training_plan_run_day_id] : [])
       return fromRow((await tx.query<SessionRow>('SELECT * FROM training_sessions WHERE id=?', [id]))[0]!)
     })
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('motion:training-changed'))
+    return completed
   }
 
   async abandon(id: string): Promise<TrainingSession> {
-    return this.db.transaction(async (tx) => {
+    const abandoned = await this.db.transaction(async (tx) => {
       const rows = await tx.query<SessionRow>('SELECT * FROM training_sessions WHERE id=?', [id])
       const session = rows[0]
       if (!session) throw new Error('Session not found')
@@ -138,6 +160,8 @@ export class TrainingSessionRepository {
       await rebuildTrainingState(tx, [session.local_date], session.training_plan_run_day_id ? [session.training_plan_run_day_id] : [])
       return fromRow((await tx.query<SessionRow>('SELECT * FROM training_sessions WHERE id=?', [id]))[0]!)
     })
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('motion:training-changed'))
+    return abandoned
   }
 
   async saveFeedback(id: string, feedback: SessionFeedback): Promise<void> {
@@ -162,7 +186,7 @@ export class TrainingSessionRepository {
   async correctCompleted(id: string, changes: { localDate?: string; durationMinutes?: number }): Promise<TrainingSession> {
     if (changes.durationMinutes !== undefined && (!Number.isFinite(changes.durationMinutes) || changes.durationMinutes < 0)) throw new Error('Invalid duration')
     if (changes.localDate) addLocalDays(changes.localDate, 0)
-    return this.db.transaction(async (tx) => {
+    const corrected = await this.db.transaction(async (tx) => {
       const rows = await tx.query<SessionRow>('SELECT * FROM training_sessions WHERE id=?', [id])
       const session = rows[0]
       if (!session || session.lifecycle_status !== 'COMPLETED') throw new Error('Completed session not found')
@@ -173,6 +197,8 @@ export class TrainingSessionRepository {
         session.training_plan_run_day_id ? [session.training_plan_run_day_id] : [])
       return fromRow((await tx.query<SessionRow>('SELECT * FROM training_sessions WHERE id=?', [id]))[0]!)
     })
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('motion:training-changed'))
+    return corrected
   }
 
   async remove(id: string): Promise<void> {
@@ -183,5 +209,6 @@ export class TrainingSessionRepository {
       await tx.run('DELETE FROM training_sessions WHERE id=?', [id])
       await rebuildTrainingState(tx, [session.local_date], session.training_plan_run_day_id ? [session.training_plan_run_day_id] : [])
     })
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('motion:training-changed'))
   }
 }

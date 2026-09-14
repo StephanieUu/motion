@@ -1,4 +1,4 @@
-.today-screen { display: grid; gap: 0; min-width: 0; }
+.screen-content .today-screen { display: grid; gap: 0; min-width: 0; }
 .today-feature { position: relative; margin-inline: calc(-1 * var(--space-5)); padding-inline: var(--space-5); overflow: hidden; isolation: isolate; }
 .today-feature__art { position: absolute; z-index: -1; inset: 0; pointer-events: none; }
 .today-feature__art img { position: absolute; top: -6rem; left: calc(50% - 1.2rem); display: block; width: 100%; max-width: none; height: auto; transform: translateX(-50%); }
@@ -22,6 +22,38 @@
 .today-feature .workout-card button.workout-card__start { position: absolute; right: var(--space-3); bottom: var(--space-3); display: grid; width: 3.1rem; height: 3.1rem; min-height: 0; place-items: center; padding: 0; border: 2px solid var(--color-surface); border-radius: 50%; background: rgb(255 252 245 / 90%); box-shadow: 0 .15rem .4rem rgb(46 66 53 / 12%); color: var(--color-green-deep); }
 .today-feature .workout-card__start .app-icon { width: 1.25rem; height: 1.25rem; }
 .today-feature .workout-card__complete { width: min(100%, 11.5rem); }
+.today-feature .workout-card__completed { display: grid; gap: .2rem; margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--color-gold-art); }
+.today-feature .workout-card__completed p { max-width: 100%; margin: 0; color: var(--color-ink-soft); }
+.today-feature .workout-card__completed p:first-child { color: var(--color-green-deep); font-weight: 700; }
+.today-feature .workout-card__completed strong { color: var(--color-green-deep); font-size: .9rem; overflow-wrap: anywhere; }
+.today-feature .workout-card__completed span { color: var(--color-ink-soft); font-size: .78rem; }
+.today-activity { display: grid; gap: .3rem; margin: .75rem 0 1.15rem; padding: 0 .2rem; }
+.today-activity h2 { color: var(--color-green-deep); font-family: var(--font-display); font-size: 1.06rem; }
+.today-activity > p { margin: 0; color: var(--color-ink-soft); font-size: .78rem; }
+.today-activity ul { display: grid; gap: 0; margin: .35rem 0 0; padding: 0; list-style: none; }
+.today-activity li { display: flex; flex-wrap: wrap; align-items: baseline; gap: .2rem .45rem; padding: .48rem 0; border-bottom: 1px solid rgb(169 141 86 / 24%); font-size: .8rem; }
+.today-activity li > span { flex: 0 0 100%; color: var(--color-green-deep); font-size: .69rem; }
+.today-activity li strong { min-width: 0; overflow-wrap: anywhere; }
+.today-activity li em { margin-left: auto; color: var(--color-ink-soft); font-size: .76rem; font-style: normal; font-variant-numeric: tabular-nums; }
+.today-screen[data-mini-focus='true'] .workout-card h2 { max-width: 100%; }
+.today-screen[data-mini-focus='true'] .today-feature__art { opacity: .55; }
+.mini-routine-execution, .mini-routine-complete { display: grid; gap: .65rem; padding: .7rem 0 .15rem; }
+.mini-routine-execution p, .mini-routine-complete p { max-width: 100% !important; margin: 0 !important; color: var(--color-ink-soft); font-size: .85rem !important; }
+.mini-routine-execution > button:not(.mini-routine-execution__abandon), .mini-routine-complete button { width: 100%; min-height: 3rem; color: var(--color-surface); }
+.mini-routine-execution__abandon { justify-self: start; border: 0 !important; background: transparent !important; color: var(--color-ink-soft) !important; font-weight: 500; }
+.mini-routine-execution__exit { display: grid; gap: .45rem; padding: .6rem 0; border-top: 1px solid var(--color-gold-soft); }
+.mini-routine-execution__exit button:first-of-type { background: var(--color-green-soft); color: var(--color-green-deep); }
+.mini-routine-execution__exit button:last-of-type { background: transparent; color: var(--color-ink-soft); }
+.today-feature .workout-card .workout-card__flow { gap: var(--space-2); margin-top: var(--space-3); padding: var(--space-3) 0 0; border-top: 1px solid var(--color-gold-art); }
+.today-feature .workout-card .workout-card__flow h2 { max-width: 100%; margin: 0; font-size: 1.1rem; }
+.today-feature .workout-card .workout-card__flow button { width: 100%; min-height: 2.6rem; margin: 0; border: 1px solid var(--color-green-deep); border-radius: .65rem; background: var(--color-green-soft); color: var(--color-green-deep); }
+.today-feature .workout-card .workout-card__flow button[aria-pressed='true'] { background: var(--color-green-deep); color: white; }
+.today-feature .workout-card .workout-card__flow .today-execution__secondary { border-color: var(--color-line); background: transparent; color: var(--color-ink-soft); }
+.today-feature .workout-card .workout-card__confirm { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.today-feature .workout-card .workout-card__confirm h2, .today-feature .workout-card .workout-card__confirm button:last-child { grid-column: 1 / -1; }
+.today-feature .workout-card .workout-card__flow .today-execution__choice button { width: auto; }
+.today-feature .workout-card .workout-card__early-feedback { display: grid; gap: var(--space-2); }
+.today-feature .workout-card .workout-card__early-feedback h3 { font-size: .85rem; }
 .workout-card__source { display: inline-flex; align-items: center; margin-top: var(--space-3); color: var(--color-green-deep); font-size: .8rem; font-weight: 700; text-decoration: underline; text-underline-offset: .2em; }
 .today-execution, .today-execution__progress { display: grid; gap: var(--space-3); padding: var(--space-5) var(--space-1); border: 0; border-top: 1px solid var(--color-gold-soft); border-radius: 0; background: transparent; }
 .today-execution h2 { font-size: 1.25rem; }
@@ -75,16 +107,20 @@
 .today-plan__node[data-current='true'][data-kind='REST'] .today-plan__node-mark, .today-plan__node[data-current='true'][data-kind='REST_DONE'] .today-plan__node-mark { width: 2.8rem; height: 2.8rem; margin-top: -.28rem; margin-bottom: -.28rem; border: 2px solid var(--color-coral); border-radius: 50%; background: var(--color-pink); box-shadow: 0 0 0 .22rem rgb(185 103 71 / 12%); }
 .today-plan__node[data-current='true'][data-kind='REST'] .today-plan__node-mark::after, .today-plan__node[data-current='true'][data-kind='REST_DONE'] .today-plan__node-mark::after { position: absolute; top: .22rem; left: 1rem; display: block; width: 1.7rem; height: 1.7rem; border-radius: 50%; background: var(--color-surface); content: ''; }
 .today-plan__node[data-current='true'] .today-plan__node-index { color: var(--color-coral); font-weight: 750; }
-.today-interlude { position: relative; height: 5.5rem; margin: 0; overflow: hidden; border: 1px solid rgb(169 141 86 / 29%); border-radius: 1.1rem; background: rgb(255 252 245 / 75%); }
-.today-interlude img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 55%; }
-.today-recommendation { position: relative; display: grid; gap: var(--space-2); padding: var(--space-2) 0 var(--space-3); border: 0; background: transparent; }
-.today-recommendation__actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
-.today-recommendation .today-recommendation__entry { position: relative; display: flex; min-height: 2.9rem; align-items: center; justify-content: space-between; gap: .3rem; overflow: hidden; padding: var(--space-3); border-radius: 2rem; text-align: left; font-family: var(--font-display); font-size: .92rem; line-height: 1.3; }
+.today-screen > .motivation { padding-bottom: .75rem; }
+.today-recommendation { position: relative; display: grid; gap: var(--space-2); margin-top: 0; padding: 0 0 var(--space-3); border: 0; background: transparent; isolation: isolate; }
+.today-recommendation__art { position: absolute; z-index: -1; right: -1.5rem; bottom: 0; width: min(80%, 24rem); height: 7rem; object-fit: cover; object-position: right bottom; opacity: .2; pointer-events: none; }
+.today-recommendation__routes { display: grid; gap: .35rem; }
+.today-recommendation__label { color: var(--color-gold); font-size: .72rem; font-weight: 650; line-height: 1.2; letter-spacing: .03em; }
+.today-recommendation__manual { display: inline-flex; align-items: center; justify-self: start; gap: .25rem; padding: .3rem 0; color: var(--color-green-deep); font-size: .78rem; text-decoration: underline; text-underline-offset: .2rem; white-space: nowrap; }
+.today-recommendation__manual .app-icon { width: .9rem; height: .9rem; }
+.today-recommendation__actions { display: grid; gap: .2rem; }
+.today-recommendation__secondary { display: flex; align-items: center; gap: .55rem; min-width: 0; color: var(--color-gold); }
+.today-recommendation .today-recommendation__entry { position: relative; display: flex; min-height: 2.9rem; align-items: center; justify-content: space-between; gap: .3rem; overflow: hidden; padding: var(--space-2) var(--space-3); border-radius: 2rem; text-align: left; font-family: var(--font-display); font-size: .86rem; line-height: 1.3; }
 .today-recommendation .today-recommendation__entry .app-icon { z-index: 1; width: 1.05rem; height: 1.05rem; }
 .today-recommendation__entry--library { border: 1px solid var(--color-green-deep) !important; background: var(--color-green-deep) !important; color: var(--color-surface) !important; }
 .today-recommendation__entry--library::before { position: absolute; top: -.7rem; right: -.65rem; width: 5rem; height: 5rem; background: url('../../assets/motion-art/motion-orbit.svg') center / contain no-repeat; content: ''; opacity: .22; filter: brightness(2); }
-.today-recommendation__entry--activity { border: 1px solid var(--color-gold-soft) !important; background: var(--color-surface) !important; color: var(--color-ink) !important; }
-.today-recommendation__entry--activity::before { position: absolute; top: -.4rem; right: .2rem; width: 4.5rem; height: 4.5rem; background: url('../../assets/motion-art/motion-crescent.svg') center / contain no-repeat; content: ''; opacity: .22; }
+.today-recommendation .today-recommendation__entry--activity { min-height: 2rem; justify-content: start; padding: .3rem 0; border: 0; border-radius: 0; background: transparent; color: var(--color-green-deep); font-family: var(--font-sans); font-size: .78rem; font-weight: 600; white-space: nowrap; }
 .today-recommendation button { min-height: 2.8rem; padding: var(--space-2) var(--space-3); border: 1px solid var(--color-green-deep); border-radius: .4rem; background: var(--color-green-soft); color: var(--color-green-deep); font: inherit; font-weight: 700; cursor: pointer; }
 .today-recommendation button:disabled { opacity: .55; cursor: default; }
 .today-recommendation .today-recommendation__primary { background: var(--color-green-deep); color: white; }

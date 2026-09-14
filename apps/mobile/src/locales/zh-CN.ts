@@ -42,6 +42,11 @@ export const zhCN = {
     footer: '',
   },
   training: {
+    quickStart: '快速开始',
+    quickMiniRoutine: '小练习',
+    quickMiniDuration: '4–10 分钟',
+    quickMiniStart: '开始',
+    quickMiniError: '请先完成当前训练，再试一次',
     eyebrow: '我的训练',
     title: '训练库',
     countUnit: '项训练',
@@ -75,7 +80,7 @@ export const zhCN = {
     historyOptions: { ALL: '全部记录', NEVER: '未做过', NOT_RECENT: '最近没做' },
     sources: {
       BILIBILI: 'B站', XIAOHONGSHU: '小红书', QUARK: '夸克', YOUTUBE: 'YouTube',
-      LOCAL: '本地', WEB: '网页', APP_BUILTIN: 'Motion 内置', MANUAL: '手动添加',
+      LOCAL: '本地', WEB: '网页', APP_BUILTIN: '小练习', MANUAL: '手动添加',
     },
     fallbackTitles: {
       BILIBILI: 'B站训练', XIAOHONGSHU: '小红书训练', QUARK: '夸克训练',
@@ -158,7 +163,7 @@ export const zhCN = {
   },
   execution: {
     title: '今日训练', planDay: '计划', progress: '计划进度', pending: '今日已选', noTask: '今天还没有训练',
-    selectInLibrary: '去训练库选择', viewPlan: '查看计划', start: '开始训练',
+    selectInLibrary: '自己选训练', viewPlan: '查看计划', start: '开始训练',
     inProgress: '训练进行中', startedAt: '开始时间', complete: '完成训练',
     openWorkout: '打开训练链接', finishQuestion: '完成了吗？', finishedYes: '完成了',
     notYet: '还没', confirmWorkout: '确认训练', saveWorkout: '保存训练',
@@ -172,6 +177,7 @@ export const zhCN = {
     unavailable: '数据加载失败', error: '操作失败，请重试',
   },
   recommendation: {
+    discoveryLabel: '探索训练',
     sectionTitle: '训练推荐', libraryEntry: '从训练库推荐', activityEntry: '新的运动', title: '推荐偏好',
     mood: '状态', intensity: '强度', duration: '时长', novelty: '新鲜度',
     moods: { VERY_UNMOTIVATED: '很不想动', TIRED: '有点累', NORMAL: '正常',
@@ -182,7 +188,7 @@ export const zhCN = {
     novelties: { FAMILIAR: '熟悉', MIXED: '混合', FRESH: '尽量新鲜' },
     noEquipment: '只看无器械',
     suggest: '看看推荐', again: '再来一个', cancel: '取消',
-    result: '推荐训练', activityResult: '新的运动', empty: '暂无合适训练',
+    activityResult: '新的运动', empty: '暂无合适训练',
     selected: '已选为今日训练', accept: '今天做这个', doActivity: '就做这个', findNew: '去找训练',
     findHint: '找到喜欢的训练后，分享回来', error: '推荐暂时不可用',
     reasons: { MATCH_DURATION: '时长合适', MATCH_INTENSITY: '强度合适', MATCH_PLAN: '接近原计划',
@@ -192,13 +198,35 @@ export const zhCN = {
   todayProvenance: {
     planned: '计划训练', recommendedReplacement: '推荐替换', restExtra: '休息日加练',
     todayRecommended: '今日推荐', manual: '自己添加', original: '原计划：', rest: '休息',
-    plannedRest: '计划休息', day: '第', dayUnit: '天',
+    plannedRest: '计划休息', actual: '实际', day: '第', dayUnit: '天',
+  },
+  todayActivity: {
+    title: '今日活动', summaryStart: '今天已运动', countUnit: '次', about: '约 ',
+    underOneMinute: '不足 1 分钟', miniRoutine: '小练习', lowIntensity: '低强度',
+    rescue: '今天加练', manual: '自己选择',
   },
   currentPlanProgress: {
     title: '当前计划', shortTitle: '计划', day: '第', dayUnit: '天', complete: '已完成', trainingUnit: '次训练',
     segments: { REST: '休息日', REST_DONE: '已休息', COMPLETED: '已完成训练',
       PARTIAL: '部分完成', SKIPPED: '已跳过', IN_PROGRESS: '训练进行中', PENDING: '待训练' },
   },
+  motivation: {
+    title: '运动节奏', streakCompact: '连续', dayUnit: '天',
+    weeklyGoal: '本周目标', protection: '连续保护', protectionAvailable: '1 次可用',
+    useProtection: '保护昨天', useProtectionToday: '保护今天', protectionUsed: '已使用连续保护',
+    rescueTitle: '今天还没练', rescueHint: '可以做个短训练，也可以调整今天的计划。',
+    rescueVideo: '5–10 分钟视频',
+    miniRoutine: '4–10 分钟小练习', postpone: '顺延今天计划', rest: '今天先不练',
+    restNotice: '今天休息；未使用计划休息时，连续运动按通常规则计算。',
+    restPlanned: '已记录计划休息', postponeNotice: '计划已顺延', postponeUnavailable: '今天没有可顺延的计划',
+    rescueTime: '提醒时间', notifications: '开启本地提醒', saveTime: '保存提醒设置',
+    permissionDenied: '通知权限未开启，时间已保存', notificationBody: '打开 Motion，看看今天适合做什么。',
+    routineTitle: '轻量动作', routineStep: '动作', routineDone: '完成这一步',
+    routineFinish: '全部完成', routineAbandon: '结束小练习',
+    routineExitQuestion: '结束这次小练习？', routineKeepGoing: '继续小练习', routineConfirmExit: '确认结束',
+    routineComplete: '小练习完成', routineRecorded: '今天的训练已记录', routineReturn: '回到今天',
+  },
+  me: { remindersTitle: '提醒与节奏', reminderSaved: '提醒设置已保存' },
   placeholders: {
     training: {
       eyebrow: '训练',

@@ -33,6 +33,11 @@ export function displayWorkoutTitle(workout: LibraryWorkout): string {
   return uiCopy.training.fallbackTitles[workout.sourceType]
 }
 
+export function formatDisplayMinutes(minutes: number): string {
+  if (minutes > 0 && minutes < 0.5) return uiCopy.todayActivity.underOneMinute
+  return `${Number.isInteger(minutes) ? '' : uiCopy.todayActivity.about}${Math.round(minutes)} ${uiCopy.training.minutes}`
+}
+
 export function workoutTags(workout: LibraryWorkout): string[] {
   const tags: string[] = workout.bodyAreas.map((area) =>
     uiCopy.training.bodyAreas[area as keyof typeof uiCopy.training.bodyAreas]

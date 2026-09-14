@@ -1,6 +1,8 @@
 import type { PlanRunDayView } from '../../db/repositories/TrainingPlanRepository'
 import type { LibraryWorkout } from '../../db/repositories/WorkoutRepository'
 import type { ExecutionSnapshot } from '../training/trainingExecution'
+import { uiCopy } from '../../locales'
+import { displayWorkoutTitle, formatDisplayMinutes } from '../training/libraryModel'
 
 export type TodayProvenanceKind = 'PLAN_ORIGINAL' | 'RECOMMENDED_REPLACEMENT' |
   'REST_EXTRA' | 'TODAY_RECOMMENDED' | 'MANUAL'
@@ -9,6 +11,50 @@ export interface TodayProvenance {
   kind: TodayProvenanceKind
   planDayIndex: number | null
   originalWorkout: LibraryWorkout | null
+}
+
+export interface TodayActivity {
+  id: string
+  title: string
+  provenance: string
+  actualMinutes: number | null
+  durationLabel: string | null
+}
+
+export function formatActualMinutes(minutes: number): string {
+  return formatDisplayMinutes(minutes)
+}
+
+export function deriveTodayActivities(snapshot: ExecutionSnapshot, today: string): {
+  count: number; totalMinutes: number; totalLabel: string; entries: TodayActivity[]
+} {
+  const entries = (snapshot.completedActivities ?? []).filter(({ session }) => session.localDate === today)
+    .map(({ session, origin, recommendationSource }) => {
+      const workout = snapshot.workouts.find((item) => item.id === session.workoutContentId)
+      const restExtra = !session.trainingPlanRunDayId && snapshot.runDays.some((day) => day.isRestDay
+        && day.scheduledLocalDate === today)
+      const planDay = snapshot.runDays.find((day) => day.id === session.trainingPlanRunDayId)
+      const mini = !!session.miniRoutineVersionId
+      const provenance = mini && restExtra
+        ? `${uiCopy.todayProvenance.restExtra} · ${uiCopy.todayActivity.miniRoutine}`
+        : mini ? uiCopy.todayActivity.miniRoutine
+          : restExtra ? uiCopy.todayProvenance.restExtra
+          : origin === 'FREE_ACTIVITY' ? uiCopy.recommendation.activityEntry
+            : recommendationSource === 'RESCUE' || origin === 'RESCUE' ? uiCopy.todayActivity.rescue
+              : planDay && session.workoutContentId !== planDay.primaryWorkoutId && recommendationSource
+                ? uiCopy.todayProvenance.recommendedReplacement
+                : planDay && session.workoutContentId !== planDay.primaryWorkoutId
+                  ? uiCopy.todayProvenance.manual
+                  : planDay ? uiCopy.todayProvenance.planned
+                  : recommendationSource ? uiCopy.todayProvenance.todayRecommended
+                    : uiCopy.todayActivity.manual
+      return { id: session.id, title: workout ? displayWorkoutTitle(workout)
+        : mini ? uiCopy.todayActivity.miniRoutine : uiCopy.recommendation.activityEntry,
+      provenance, actualMinutes: session.durationMinutes,
+      durationLabel: session.durationMinutes === null ? null : formatActualMinutes(session.durationMinutes) }
+    })
+  const totalMinutes = entries.reduce((sum, entry) => sum + (entry.actualMinutes ?? 0), 0)
+  return { count: entries.length, totalMinutes, totalLabel: `${Math.round(totalMinutes)} ${uiCopy.execution.minutes}`, entries }
 }
 
 export function deriveTodayProvenance(snapshot: ExecutionSnapshot, today: string): TodayProvenance | null {

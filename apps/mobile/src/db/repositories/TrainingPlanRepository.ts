@@ -125,6 +125,7 @@ export class TrainingPlanRepository {
           VALUES (?,?,?,?,?,'SCHEDULED',?)`, [crypto.randomUUID(), id, day.id, date, date, new Date().toISOString()])
       }
     })
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('motion:training-changed'))
     return id
   }
 
@@ -235,6 +236,7 @@ export class TrainingPlanRepository {
       await tx.run('UPDATE training_plan_run_days SET scheduled_local_date=?,reschedule_count=reschedule_count+1,updated_at=? WHERE id=?', [other.scheduled_local_date, now, restId])
       await refreshRunProgress(tx, rest.training_plan_run_id)
     })
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('motion:training-changed'))
   }
 
   async reschedule(runDayId: string, newDate: string): Promise<void> {
@@ -250,6 +252,7 @@ export class TrainingPlanRepository {
       if (delta === 0) return
       await shiftPending(tx, day.training_plan_run_id, day.scheduled_local_date, delta)
     })
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('motion:training-changed'))
   }
 
   async skip(runDayId: string): Promise<void> {
@@ -281,6 +284,7 @@ export class TrainingPlanRepository {
       await tx.run("UPDATE training_plan_run_days SET status='PLANNED_REST',completed_at=?,updated_at=? WHERE id=?", [now, now, runDayId])
       await rebuildTrainingState(tx, [], [runDayId])
     })
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('motion:training-changed'))
   }
 
   private async assertCurrent(tx: SqlAccess, day: RunDayRow): Promise<void> {

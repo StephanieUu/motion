@@ -7,12 +7,15 @@ import { ChoiceSelect } from '../../components/ChoiceSelect'
 import celestialComposition from '../../assets/motion-art/today-artwork.png'
 import interludeArt from '../../assets/motion-art/today-interlude.png'
 import { uiCopy } from '../../locales'
-import { displayWorkoutTitle } from '../training/libraryModel'
+import { displayWorkoutTitle, formatDisplayMinutes } from '../training/libraryModel'
 import { openTrainingExecution, type ExecutionSnapshot, type TrainingExecution } from '../training/trainingExecution'
 import { openTodayRecommendations, type RecommendationRequest, type RecommendationView,
   type TodayRecommendations } from './todayRecommendations'
 import { TodayPlanPath } from './TodayPlanPath'
-import { deriveCurrentPlanProgress, deriveTodayProvenance } from './todayModel'
+import { deriveCurrentPlanProgress, deriveTodayActivities, deriveTodayProvenance,
+  formatActualMinutes } from './todayModel'
+import { MotivationPanel } from '../motivation/MotivationPanel'
+import type { MotivationRepository } from '../../db/repositories/MotivationRepository'
 import './today.css'
 
 const completionOptions: CompletionStatus[] = ['COMPLETE', 'MOSTLY_COMPLETE', 'PARTIAL']
@@ -41,8 +44,8 @@ function RecommendationChoices({ label, options, value, onChoose }: {
   </fieldset>
 }
 
-export function TodayScreen({ execution: supplied, recommendations: suppliedRecommendations }:
-  { execution?: TrainingExecution; recommendations?: TodayRecommendations }) {
+export function TodayScreen({ execution: supplied, recommendations: suppliedRecommendations, motivation: suppliedMotivation }:
+  { execution?: TrainingExecution; recommendations?: TodayRecommendations; motivation?: MotivationRepository }) {
   const [service, setService] = useState<TrainingExecution | null>(supplied ?? null)
   const [data, setData] = useState<ExecutionSnapshot | null>(null)
   const [error, setError] = useState('')
@@ -62,6 +65,10 @@ export function TodayScreen({ execution: supplied, recommendations: suppliedReco
   const [recommendationRequest, setRecommendationRequest] = useState<RecommendationRequest>({
     mood: 'NORMAL', intensity: 'AUTO', duration: '15_30', novelty: 'MIXED' })
   const [recommendationEmpty, setRecommendationEmpty] = useState(false)
+  const [motivationRefresh, setMotivationRefresh] = useState(0)
+  const [miniStep, setMiniStep] = useState(0)
+  const [miniExitConfirm, setMiniExitConfirm] = useState(false)
+  const [miniComplete, setMiniComplete] = useState<{ count: number; durationMinutes: number } | null>(null)
 
   useEffect(() => {
     let active = true
@@ -116,7 +123,7 @@ export function TodayScreen({ execution: supplied, recommendations: suppliedReco
     if (!service || busy) return
     setBusy(true); setError(''); setNotice('')
     try {
-      await work(service); setData(await service.load())
+      await work(service); setData(await service.load()); setMotivationRefresh((value) => value + 1)
       if (recommendations) {
         try {
           const latest = await recommendations.latest()
@@ -139,7 +146,6 @@ export function TodayScreen({ execution: supplied, recommendations: suppliedReco
     await act(async (current) => {
       await current.completeWorkout(session.id, minutes, status, equivalence || undefined)
       setFeedbackId(session.id); setDuration(''); setEquivalence(''); setFinishStage('IDLE')
-      setNotice(uiCopy.execution.done)
     })
   }
 
@@ -182,6 +188,8 @@ export function TodayScreen({ execution: supplied, recommendations: suppliedReco
   const workout = data?.mainWorkout
   const day = data?.currentDay
   const session = data?.session
+  const miniRoutine = data?.miniRoutine
+  const miniFocus = !!session && !!miniRoutine
   const replacing = !!session && !!day && !!session.trainingPlanRunDayId && session.workoutContentId !== day.primaryWorkoutId
   const future = !!day && !!service && day.scheduledLocalDate > service.today()
   const explicit = !!workout && data?.pendingWorkoutId === workout.id
@@ -191,14 +199,24 @@ export function TodayScreen({ execution: supplied, recommendations: suppliedReco
   const date = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())
   const provenance = data && service ? deriveTodayProvenance(data, service.today()) : null
   const planProgress = data ? deriveCurrentPlanProgress(data) : null
+  const todayActivities = data && service ? deriveTodayActivities(data, service.today()) : null
   const provenanceCopy = provenance?.kind === 'PLAN_ORIGINAL'
     ? `${uiCopy.todayProvenance.planned} · ${uiCopy.todayProvenance.day}${provenance.planDayIndex}${uiCopy.todayProvenance.dayUnit}`
     : provenance?.kind === 'RECOMMENDED_REPLACEMENT' ? uiCopy.todayProvenance.recommendedReplacement
       : provenance?.kind === 'REST_EXTRA' ? uiCopy.todayProvenance.restExtra
         : provenance?.kind === 'TODAY_RECOMMENDED' ? uiCopy.todayProvenance.todayRecommended
           : provenance?.kind === 'MANUAL' ? uiCopy.todayProvenance.manual : null
+  const feedbackChoices = <>
+    <div className="today-execution__choice"><span>{uiCopy.execution.effort}</span>
+      {(['EASY', 'JUST_RIGHT', 'HARD'] as const).map((value) => <button type="button" key={value}
+        aria-pressed={effort === value} onClick={() => setEffort(value)}>{value === 'EASY' ? uiCopy.execution.easy
+          : value === 'JUST_RIGHT' ? uiCopy.execution.justRight : uiCopy.execution.hard}</button>)}</div>
+    <div className="today-execution__choice"><span>{uiCopy.execution.feeling}</span>
+      {reactionOptions.map((value) => <button type="button" key={value} aria-label={uiCopy.training.reactionLabels[value]}
+        aria-pressed={reaction === value} onClick={() => setReaction(value)}>{uiCopy.training.reactions[value]}</button>)}</div>
+  </>
 
-  return <div className="today-screen">
+  return <div className="today-screen" data-mini-focus={miniFocus || !!miniComplete}>
     <div className="today-feature" data-rest={!!day?.isRestDay && !workout}>
       <div className="today-feature__art" aria-hidden="true">
         <img src={celestialComposition} alt="" />
@@ -214,35 +232,122 @@ export function TodayScreen({ execution: supplied, recommendations: suppliedReco
       data-composition={provenance?.kind ?? 'NONE'}>
       <div className="workout-card__content">
         <span className="eyebrow">{uiCopy.execution.title}</span>
-        <h2 id="today-workout-title">{!data ? error || uiCopy.plan.loading
+        <h2 id="today-workout-title">{miniComplete ? uiCopy.motivation.routineComplete
+          : miniFocus ? miniRoutine.items[Math.min(miniStep, miniRoutine.items.length - 1)]?.name
+            ?? uiCopy.motivation.routineTitle
+          : !data ? error || uiCopy.plan.loading
           : session ? uiCopy.execution.inProgress : data.run?.status === 'PAUSED' && !explicit
           ? uiCopy.execution.paused : workout ? displayWorkoutTitle(workout)
             : day?.isRestDay ? uiCopy.execution.rest : uiCopy.execution.noTask}</h2>
-        {session && workout ? <p className="workout-card__current-title">{displayWorkoutTitle(workout)}</p> : null}
+        {session && workout && !miniFocus ? <p className="workout-card__current-title">{displayWorkoutTitle(workout)}</p> : null}
         {provenance?.kind === 'REST_EXTRA' ? <p className="workout-card__original">
           {uiCopy.todayProvenance.original}{uiCopy.todayProvenance.rest}</p>
           : provenance?.originalWorkout ? <p className="workout-card__original">
             {uiCopy.todayProvenance.original}{displayWorkoutTitle(provenance.originalWorkout)}</p> : null}
-        {workout ? <div className="workout-card__meta">
+        {miniComplete ? <div className="mini-routine-complete" role="status">
+          <p>{miniComplete.count} / {miniComplete.count} · {formatActualMinutes(miniComplete.durationMinutes)}</p>
+          <p>{uiCopy.motivation.routineRecorded}</p>
+          <button type="button" onClick={() => setMiniComplete(null)}>{uiCopy.motivation.routineReturn}</button>
+        </div> : null}
+        {miniFocus ? <section className="mini-routine-execution" aria-label={uiCopy.motivation.routineTitle}>
+          <span className="eyebrow">{uiCopy.motivation.routineStep} {Math.min(miniStep + 1, miniRoutine.items.length)} / {miniRoutine.items.length}</span>
+          <p>{uiCopy.todayActivity.lowIntensity} · {uiCopy.todayActivity.miniRoutine}</p>
+          <p>{miniRoutine.items[miniStep]?.instructions}</p>
+          <p>{miniRoutine.items[miniStep]?.seconds} 秒</p>
+          {miniStep < miniRoutine.items.length - 1 ? <button type="button" disabled={busy}
+            onClick={() => setMiniStep((value) => value + 1)}>{uiCopy.motivation.routineDone}</button>
+            : <button type="button" disabled={busy} onClick={() => void act(async (current) => {
+              const completed = await current.completeMiniRoutine(session.id, true)
+              setMiniComplete({ count: miniRoutine.items.length, durationMinutes: completed.durationMinutes ?? 0 })
+              setMiniStep(0); setMiniExitConfirm(false)
+            })}>{uiCopy.motivation.routineFinish}</button>}
+          {miniExitConfirm ? <div className="mini-routine-execution__exit">
+            <p>{uiCopy.motivation.routineExitQuestion}</p>
+            <button type="button" disabled={busy} onClick={() => setMiniExitConfirm(false)}>
+              {uiCopy.motivation.routineKeepGoing}</button>
+            <button type="button" disabled={busy} onClick={() => void act(async (current) => {
+              await current.abandonWorkout(session.id); setMiniStep(0); setMiniExitConfirm(false)
+            })}>{uiCopy.motivation.routineConfirmExit}</button>
+          </div> : <button type="button" className="mini-routine-execution__abandon" disabled={busy}
+            onClick={() => setMiniExitConfirm(true)}>{uiCopy.motivation.routineAbandon}</button>}
+        </section> : null}
+        {workout && !miniFocus && !miniComplete ? <div className="workout-card__meta">
           {workout.durationMinutes !== null ? <span><AppIcon name="clock" />
-            {workout.durationMinutes} {uiCopy.training.minutes}</span> : null}
+            {formatDisplayMinutes(workout.durationMinutes)}</span> : null}
           {intensity ? <span>{intensity}</span> : null}
           <span>{uiCopy.training.sources[workout.sourceType]}</span>
         </div> : null}
-        {session ? <p>{uiCopy.execution.startedAt} · {new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit' }).format(new Date(session.startedAt))}</p>
-          : workout && (data?.run?.status !== 'PAUSED' || explicit) && (!future || explicit) ? <button
+        {session && !miniFocus ? <p>{uiCopy.execution.startedAt} · {new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit' }).format(new Date(session.startedAt))}</p>
+          : workout && !miniComplete && (data?.run?.status !== 'PAUSED' || explicit) && (!future || explicit) ? <button
             className="workout-card__start" type="button" aria-label={uiCopy.execution.start} disabled={busy}
             onClick={() => void act(async (current) => { await current.startWorkout(data!) })}>
             <AppIcon name="arrow" /></button> : null}
-        {session ? <button className="workout-card__complete" type="button" disabled={busy}
+        {session && !miniRoutine && finishStage === 'IDLE' ? <button className="workout-card__complete" type="button" disabled={busy}
           onClick={() => setFinishStage('CONFIRM')}>
           {uiCopy.execution.complete} <AppIcon name="arrow" /></button> : null}
-        {session && sourceUrl ? <a className="workout-card__source" href={sourceUrl} target="_blank"
+        {session && sourceUrl && finishStage === 'IDLE' ? <a className="workout-card__source" href={sourceUrl} target="_blank"
           rel="noopener noreferrer">{uiCopy.execution.openWorkout}</a> : null}
+        {session && finishStage === 'CONFIRM' ? <section className="today-execution today-execution__confirm workout-card__flow workout-card__confirm"
+          aria-labelledby="today-finish-question">
+          <h2 id="today-finish-question">{uiCopy.execution.finishQuestion}</h2>
+          <button type="button" disabled={busy} onClick={() => {
+            setDuration(String(elapsedMinutes(session.startedAt)))
+            setFinishStage('DETAILS')
+          }}>{uiCopy.execution.finishedYes}</button>
+          <button type="button" className="today-execution__secondary" onClick={() => setFinishStage('IDLE')}>
+            {uiCopy.execution.notYet}</button>
+          <button type="button" className="today-execution__secondary" disabled={busy}
+            onClick={() => void act(async (current) => {
+              await current.abandonWorkout(session.id)
+              setFinishStage('IDLE')
+            })}>{uiCopy.execution.abandon}</button>
+        </section> : null}
+        {session && finishStage === 'DETAILS' ? <form className="today-execution workout-card__flow"
+          onSubmit={(event) => void complete(event)}>
+          <h2>{uiCopy.execution.confirmWorkout}</h2>
+          <div className="workout-card__early-feedback"><h3>{uiCopy.execution.feedback}</h3>{feedbackChoices}</div>
+          <label>{uiCopy.execution.duration} · {uiCopy.execution.minutes}<input type="number" min="0" step="any"
+            inputMode="decimal" value={duration} placeholder={String(elapsedMinutes(session.startedAt))}
+            onChange={(event) => setDuration(event.target.value)} /></label>
+          <ChoiceSelect label={uiCopy.execution.status} value={status}
+            onChange={(value) => setStatus(value as CompletionStatus)}
+            options={completionOptions.map((value) => ({ value, label: value === 'COMPLETE'
+              ? uiCopy.execution.completeStatus : value === 'MOSTLY_COMPLETE'
+                ? uiCopy.execution.mostlyStatus : uiCopy.execution.partialStatus }))} />
+          {replacing ? <ChoiceSelect label={uiCopy.execution.equivalence} value={equivalence}
+            onChange={(value) => setEquivalence(value as PlanEquivalence | '')} options={[
+              { value: '', label: uiCopy.execution.equivalence },
+              ...equivalenceOptions.map((value) => ({ value, label: value === 'FULL' ? uiCopy.execution.full
+                : value === 'PARTIAL' ? uiCopy.execution.partial : uiCopy.execution.none })),
+            ]} /> : null}
+          <button type="submit" disabled={busy || (replacing && !equivalence)}>{uiCopy.execution.saveWorkout}</button>
+          <button type="button" className="today-execution__secondary" onClick={() => setFinishStage('IDLE')}>
+            {uiCopy.execution.notYet}</button>
+        </form> : null}
+        {feedbackId ? <section className="today-execution workout-card__flow" aria-label={uiCopy.execution.feedback}>
+          <h2>{uiCopy.execution.feedback}</h2>
+          {feedbackChoices}
+          <button type="button" disabled={busy || (!effort && !reaction)} onClick={() => void act(async (current) => {
+            await current.saveFeedback(feedbackId, { exertion: effort || null, preference: reaction || null })
+            setFeedbackId(null)
+          })}>{uiCopy.execution.saveFeedback}</button>
+          <button type="button" className="today-execution__secondary" onClick={() => setFeedbackId(null)}>
+            {uiCopy.execution.skipFeedback}</button>
+        </section> : null}
       </div>
     </section>
     </div>
-    {planProgress ? <section className="today-execution__progress" aria-label={uiCopy.currentPlanProgress.title}>
+    {!miniFocus && !miniComplete && todayActivities?.entries.length ? <section className="today-activity"
+      aria-label={uiCopy.todayActivity.title}>
+      <h2>{uiCopy.todayActivity.title}</h2>
+      <p>{uiCopy.todayActivity.summaryStart} {todayActivities.count} {uiCopy.todayActivity.countUnit}
+        {' · '}{todayActivities.totalLabel}</p>
+      <ul>{todayActivities.entries.map((entry) => <li key={entry.id}>
+        <span>{entry.provenance}</span><strong>{entry.title}</strong>
+        {entry.durationLabel ? <em>{entry.durationLabel}</em> : null}
+      </li>)}</ul>
+    </section> : null}
+    {!miniFocus && !miniComplete && planProgress ? <section className="today-execution__progress" aria-label={uiCopy.currentPlanProgress.title}>
       <div className="today-execution__progress-heading">
         <div><span className="eyebrow">{uiCopy.currentPlanProgress.shortTitle} · {uiCopy.currentPlanProgress.day}
           {' '}{planProgress.position} / {planProgress.totalDays} {uiCopy.currentPlanProgress.dayUnit}</span>
@@ -255,72 +360,49 @@ export function TodayScreen({ execution: supplied, recommendations: suppliedReco
         <span>{uiCopy.currentPlanProgress.complete} {planProgress.completedTraining} / {planProgress.totalTraining} {uiCopy.currentPlanProgress.trainingUnit}</span>
       </div>
     </section> : null}
+    {!miniFocus && !miniComplete && (!supplied || suppliedMotivation) ? <MotivationPanel {...(suppliedMotivation ? { motivation: suppliedMotivation } : {})}
+      refreshKey={motivationRefresh} sessionActive={!!session}
+      onVideo={async () => {
+        if (!recommendations) throw new Error('Recommendations unavailable')
+        const next = await recommendations.suggestRescue()
+        setRecommendation(next); setRecommendationEmpty(!next); setRecommendationKind('LIBRARY')
+        setRecommendationFlow('RESULT')
+      }}
+      onMiniRoutine={async () => { await act(async (current) => { await current.startMiniRoutine(); setMiniStep(0) }) }}
+      onPostpone={async () => { await act(async (current) => {
+        if (day && data?.run?.status === 'ACTIVE' && day.status === 'SCHEDULED' &&
+          day.scheduledLocalDate <= current.today()) {
+          const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
+          const date = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`
+          await current.reschedule(day.id, date)
+          setNotice(uiCopy.motivation.postponeNotice)
+        } else setNotice(uiCopy.motivation.postponeUnavailable)
+      }) }}
+      onRest={async () => { await act(async (current) => {
+        if (day?.isRestDay && day.status === 'SCHEDULED' && data?.run?.status === 'ACTIVE') {
+          await current.rest(day.id); setNotice(uiCopy.motivation.restPlanned)
+        } else setNotice(uiCopy.motivation.restNotice)
+      }) }} /> : null}
     {error ? <p className="today-execution__error" role="alert">{error}</p> : null}
     {notice ? <p className="today-execution__notice" role="status">{notice}</p> : null}
-    {session && finishStage === 'CONFIRM' ? <section className="today-execution today-execution__confirm"
-      aria-labelledby="today-finish-question">
-      <h2 id="today-finish-question">{uiCopy.execution.finishQuestion}</h2>
-      <button type="button" disabled={busy} onClick={() => {
-        setDuration(String(elapsedMinutes(session.startedAt)))
-        setFinishStage('DETAILS')
-      }}>{uiCopy.execution.finishedYes}</button>
-      <button type="button" className="today-execution__secondary" onClick={() => setFinishStage('IDLE')}>
-        {uiCopy.execution.notYet}</button>
-      <button type="button" className="today-execution__secondary" disabled={busy}
-        onClick={() => void act(async (current) => {
-          await current.abandonWorkout(session.id)
-          setFinishStage('IDLE')
-        })}>{uiCopy.execution.abandon}</button>
-    </section> : null}
-    {session && finishStage === 'DETAILS' ? <form className="today-execution" onSubmit={(event) => void complete(event)}>
-      <h2>{uiCopy.execution.confirmWorkout}</h2>
-      <label>{uiCopy.execution.duration} · {uiCopy.execution.minutes}<input type="number" min="0" step="any"
-        inputMode="decimal" value={duration} placeholder={String(elapsedMinutes(session.startedAt))}
-        onChange={(event) => setDuration(event.target.value)} /></label>
-      <ChoiceSelect label={uiCopy.execution.status} value={status}
-        onChange={(value) => setStatus(value as CompletionStatus)}
-        options={completionOptions.map((value) => ({ value, label: value === 'COMPLETE'
-          ? uiCopy.execution.completeStatus : value === 'MOSTLY_COMPLETE'
-            ? uiCopy.execution.mostlyStatus : uiCopy.execution.partialStatus }))} />
-      {replacing ? <ChoiceSelect label={uiCopy.execution.equivalence} value={equivalence}
-        onChange={(value) => setEquivalence(value as PlanEquivalence | '')} options={[
-          { value: '', label: uiCopy.execution.equivalence },
-          ...equivalenceOptions.map((value) => ({ value, label: value === 'FULL' ? uiCopy.execution.full
-            : value === 'PARTIAL' ? uiCopy.execution.partial : uiCopy.execution.none })),
-        ]} /> : null}
-      <button type="submit" disabled={busy || (replacing && !equivalence)}>{uiCopy.execution.saveWorkout}</button>
-      <button type="button" className="today-execution__secondary" onClick={() => setFinishStage('IDLE')}>
-        {uiCopy.execution.notYet}</button>
-    </form> : null}
-    {feedbackId ? <section className="today-execution" aria-label={uiCopy.execution.feedback}>
-      <h2>{uiCopy.execution.feedback}</h2>
-      <div className="today-execution__choice"><span>{uiCopy.execution.effort}</span>
-        {(['EASY', 'JUST_RIGHT', 'HARD'] as const).map((value) => <button type="button" key={value}
-          aria-pressed={effort === value} onClick={() => setEffort(value)}>{value === 'EASY' ? uiCopy.execution.easy
-            : value === 'JUST_RIGHT' ? uiCopy.execution.justRight : uiCopy.execution.hard}</button>)}</div>
-      <div className="today-execution__choice"><span>{uiCopy.execution.feeling}</span>
-        {reactionOptions.map((value) => <button type="button" key={value} aria-label={uiCopy.training.reactionLabels[value]}
-          aria-pressed={reaction === value} onClick={() => setReaction(value)}>{uiCopy.training.reactions[value]}</button>)}</div>
-      <button type="button" disabled={busy || (!effort && !reaction)} onClick={() => void act(async (current) => {
-        await current.saveFeedback(feedbackId, { exertion: effort || null, preference: reaction || null })
-        setFeedbackId(null); setNotice(uiCopy.execution.feedbackSaved)
-      })}>{uiCopy.execution.saveFeedback}</button>
-      <button type="button" className="today-execution__secondary" onClick={() => setFeedbackId(null)}>
-        {uiCopy.execution.skipFeedback}</button>
-    </section> : null}
-    {!session && data && recommendations ? <div className="today-interlude" aria-hidden="true">
-      <img src={interludeArt} alt="" />
-    </div> : null}
-    {!session && data && recommendations ? <section className="today-recommendation" aria-label={uiCopy.recommendation.sectionTitle}>
+    {!session && !miniComplete && data && recommendations ? <section className="today-recommendation" aria-label={uiCopy.recommendation.sectionTitle}>
+      <img className="today-recommendation__art" src={interludeArt} alt="" aria-hidden="true" />
       {recommendationFlow !== 'IDLE' ? <span className="eyebrow">{uiCopy.recommendation.sectionTitle}</span> : null}
-      {recommendationFlow === 'IDLE' ? <div className="today-recommendation__actions">
-        <button type="button" className="today-recommendation__entry today-recommendation__entry--library"
-          disabled={busy} onClick={() => { setRecommendationKind('LIBRARY');
-          setRecommendationFlow('FORM'); setRecommendationEmpty(false) }}>
-          <span>{uiCopy.recommendation.libraryEntry}</span><AppIcon name="arrow" /></button>
-        <button type="button" className="today-recommendation__entry today-recommendation__entry--activity" disabled={busy}
-          onClick={() => void suggest('ACTIVITY')}><span>{uiCopy.recommendation.activityEntry}</span>
-          <AppIcon name="arrow" /></button>
+      {recommendationFlow === 'IDLE' ? <div className="today-recommendation__routes">
+        <span className="today-recommendation__label">{uiCopy.recommendation.discoveryLabel}</span>
+        <div className="today-recommendation__actions">
+          <button type="button" className="today-recommendation__entry today-recommendation__entry--library"
+            disabled={busy} onClick={() => { setRecommendationKind('LIBRARY');
+            setRecommendationFlow('FORM'); setRecommendationEmpty(false) }}>
+            <span>{uiCopy.recommendation.libraryEntry}</span><AppIcon name="arrow" /></button>
+          <div className="today-recommendation__secondary">
+            <button type="button" className="today-recommendation__entry today-recommendation__entry--activity"
+              disabled={busy} onClick={() => void suggest('ACTIVITY')}>{uiCopy.recommendation.activityEntry}</button>
+            <span aria-hidden="true">·</span>
+            <Link className="today-recommendation__manual" to="/training">{uiCopy.execution.selectInLibrary}
+              <AppIcon name="arrow" /></Link>
+          </div>
+        </div>
       </div> : null}
       {recommendationFlow === 'FORM' ? <form className="today-recommendation__form" onSubmit={(event) => {
         event.preventDefault(); void suggest('LIBRARY')
@@ -350,7 +432,7 @@ export function TodayScreen({ execution: supplied, recommendations: suppliedReco
       {recommendationFlow === 'RESULT' ? <div className="today-recommendation__result" role="status"
         data-inspiration={recommendationKind === 'ACTIVITY' && !recommendation?.workout}>
         {recommendation ? <>
-          <span className="eyebrow">{recommendation.workout ? uiCopy.recommendation.result : uiCopy.recommendation.activityResult}</span>
+          {!recommendation.workout ? <span className="eyebrow">{uiCopy.recommendation.activityResult}</span> : null}
           <h2>{recommendation.workout ? displayWorkoutTitle(recommendation.workout) : recommendation.activityName}</h2>
           {recommendation.result.reasonCodes.length ? <p>{recommendation.result.reasonCodes.map(
             (code) => uiCopy.recommendation.reasons[code]).join(' · ')}</p> : null}
@@ -367,9 +449,11 @@ export function TodayScreen({ execution: supplied, recommendations: suppliedReco
           onClick={() => void suggest(recommendationKind, recommendationKind === 'ACTIVITY'
             ? recommendation?.result.activityTypeId : null)}>{uiCopy.recommendation.again}</button>
       </div> : null}
+      {recommendationFlow !== 'IDLE' ? <Link className="today-recommendation__manual" to="/training">
+        {uiCopy.execution.selectInLibrary}<AppIcon name="arrow" /></Link> : null}
     </section> : null}
-    <div className="today-execution__links">{!planProgress ? <Link to="/training/plan" state={{ from: '/' }}>
+    {!miniFocus && !miniComplete ? <div className="today-execution__links">{!planProgress ? <Link to="/training/plan" state={{ from: '/' }}>
       {uiCopy.execution.viewPlan}</Link> : null}
-      <Link to="/training">{uiCopy.execution.selectInLibrary}</Link></div>
+      {!recommendations ? <Link to="/training">{uiCopy.execution.selectInLibrary}</Link> : null}</div> : null}
   </div>
 }

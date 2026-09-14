@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import type { SourceType, WorkoutPreference, WorkoutVisibility } from '@motion/domain'
 import { logger } from '../../app/logger'
 import { ChoiceSelect } from '../../components/ChoiceSelect'
@@ -10,14 +10,16 @@ import starsArt from '../../assets/motion-art/motion-stars.svg'
 import type { LibraryWorkout } from '../../db/repositories/WorkoutRepository'
 import type { WorkoutImportResult } from '../../db/repositories/WorkoutImportRepository'
 import { uiCopy } from '../../locales'
-import { defaultLibraryFilters, displayWorkoutTitle, filterLibrary, workoutTags,
+import { defaultLibraryFilters, displayWorkoutTitle, filterLibrary, formatDisplayMinutes, workoutTags,
   type DurationFilter, type HistoryFilter, type LibraryFilters, type PreferenceFilter } from './libraryModel'
 import { InvalidWorkoutUrlError, openTrainingLibrary, TrainingLibraryUnavailableError,
   type LibrarySnapshot, type TrainingLibrary } from './trainingLibrary'
+import { openTrainingExecution, type TrainingExecution } from './trainingExecution'
 import './training.css'
 
 interface TrainingScreenProps {
   library?: TrainingLibrary | undefined
+  execution?: TrainingExecution | undefined
   importResult?: WorkoutImportResult | null
   onImportResultDismiss?: () => void
 }
@@ -61,7 +63,9 @@ function safeSourceUrl(value: string | null): string | null {
   } catch { return null }
 }
 
-export function TrainingScreen({ library: suppliedLibrary, importResult, onImportResultDismiss }: TrainingScreenProps) {
+export function TrainingScreen({ library: suppliedLibrary, execution: suppliedExecution,
+  importResult, onImportResultDismiss }: TrainingScreenProps) {
+  const navigate = useNavigate()
   const [library, setLibrary] = useState<TrainingLibrary | null>(suppliedLibrary ?? null)
   const [snapshot, setSnapshot] = useState<LibrarySnapshot | null>(null)
   const [loading, setLoading] = useState(true)
@@ -77,6 +81,7 @@ export function TrainingScreen({ library: suppliedLibrary, importResult, onImpor
   const [editTitle, setEditTitle] = useState('')
   const [editUrl, setEditUrl] = useState('')
   const [editDuration, setEditDuration] = useState('')
+  const [editDurationTouched, setEditDurationTouched] = useState(false)
   const [editActivityTypeId, setEditActivityTypeId] = useState('')
   const [editIntensity, setEditIntensity] = useState('')
   const [confirmRemove, setConfirmRemove] = useState(false)
@@ -181,6 +186,22 @@ export function TrainingScreen({ library: suppliedLibrary, importResult, onImpor
     }
   }
 
+  async function startMiniRoutine() {
+    if (saving) return
+    setSaving(true)
+    setError('')
+    try {
+      const execution = suppliedExecution ?? await openTrainingExecution()
+      await execution.startMiniRoutine()
+      navigate('/')
+    } catch (cause) {
+      logger.error('Mini Routine start failed', cause)
+      setError(uiCopy.training.quickMiniError)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   function showDetail(workout: LibraryWorkout) {
     setSelectedId(workout.id)
     setConfirmRemove(false)
@@ -191,7 +212,8 @@ export function TrainingScreen({ library: suppliedLibrary, importResult, onImpor
   function openEdit(workout: LibraryWorkout) {
     setEditTitle(workout.title ?? '')
     setEditUrl(workout.sourceUrl ?? '')
-    setEditDuration(workout.durationMinutes === null ? '' : String(workout.durationMinutes))
+    setEditDuration(workout.durationMinutes === null ? '' : String(Math.round(workout.durationMinutes)))
+    setEditDurationTouched(false)
     setEditActivityTypeId(workout.primaryActivityTypeId ?? '')
     setEditIntensity(workout.estimatedIntensity ?? '')
     setError('')
@@ -216,7 +238,8 @@ export function TrainingScreen({ library: suppliedLibrary, importResult, onImpor
   async function saveEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!library || !selected) return
-    const duration = editDuration.trim() === '' ? null : Number(editDuration)
+    const duration = !editDurationTouched ? selected.durationMinutes
+      : editDuration.trim() === '' ? null : Number(editDuration)
     if (duration !== null && (!Number.isFinite(duration) || duration < 0)) {
       setError(uiCopy.training.invalidDuration)
       return
@@ -286,6 +309,16 @@ export function TrainingScreen({ library: suppliedLibrary, importResult, onImpor
             </div>
           </header>
 
+          <section className="training-library__quick-start" aria-label={uiCopy.training.quickStart}>
+            <span className="eyebrow">{uiCopy.training.quickStart}</span>
+            <div className="training-library__quick-start-row">
+              <div><strong>{uiCopy.training.quickMiniRoutine}</strong>
+                <span>{uiCopy.training.quickMiniDuration}</span></div>
+              <button type="button" disabled={saving} onClick={() => void startMiniRoutine()}>
+                {uiCopy.training.quickMiniStart}</button>
+            </div>
+          </section>
+
           <Link className="training-library__plan-link" to="/training/plan" state={{ from: '/training' }}>
             {uiCopy.plan.title}</Link>
 
@@ -352,7 +385,7 @@ export function TrainingScreen({ library: suppliedLibrary, importResult, onImpor
               <span className="training-library__card-meta">
                 {workout.activityTypeName ?? uiCopy.training.unclassified}<span aria-hidden="true"> · </span>
                 {workout.durationMinutes === null ? uiCopy.training.durationOptions.UNKNOWN
-                  : `${workout.durationMinutes} ${uiCopy.training.minutes}`}
+                  : formatDisplayMinutes(workout.durationMinutes)}
               </span>
               {workout.userPreference ? <span className="training-library__card-reaction"
                 aria-label={uiCopy.training.reactionLabels[workout.userPreference]}>
@@ -416,7 +449,7 @@ export function TrainingScreen({ library: suppliedLibrary, importResult, onImpor
           <dl className="training-library__details-grid">
             <div><dt>{uiCopy.training.source}</dt><dd>{uiCopy.training.sources[selected.sourceType]}</dd></div>
             <div><dt>{uiCopy.training.duration}</dt><dd>{selected.durationMinutes === null ? uiCopy.training.unknown
-              : `${selected.durationMinutes} ${uiCopy.training.minutes}`}</dd></div>
+              : formatDisplayMinutes(selected.durationMinutes)}</dd></div>
             <div><dt>{uiCopy.training.activityType}</dt><dd>{selected.activityTypeName ?? uiCopy.training.unclassified}</dd></div>
             <div><dt>{uiCopy.training.intensity}</dt><dd>{displayIntensity(selected.estimatedIntensity)}</dd></div>
             <div><dt>{uiCopy.training.lastDone}</dt><dd>{displayDate(selected.lastCompletedAt)}</dd></div>
@@ -476,7 +509,7 @@ export function TrainingScreen({ library: suppliedLibrary, importResult, onImpor
               <input value={editUrl} inputMode="url" onChange={(event) => setEditUrl(event.target.value)} /></label> : null}
             <label>{uiCopy.training.duration}
               <input type="number" min="0" step="any" value={editDuration}
-                onChange={(event) => setEditDuration(event.target.value)} /></label>
+                onChange={(event) => { setEditDuration(event.target.value); setEditDurationTouched(true) }} /></label>
             <ChoiceSelect label={uiCopy.training.activityType} value={editActivityTypeId}
               onChange={setEditActivityTypeId} options={[
                 { value: '', label: uiCopy.training.unclassified },

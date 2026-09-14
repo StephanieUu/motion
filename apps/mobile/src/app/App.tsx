@@ -13,6 +13,9 @@ import { openTrainingLibrary, type TrainingLibrary } from '../features/training/
 import type { WorkoutImportResult } from '../db/repositories/WorkoutImportRepository'
 import type { SharedWorkoutPayload } from '@motion/integrations'
 import { MotionShare } from '../platform/share/motionShare'
+import { rescueNotifications } from '../platform/notifications/rescueNotifications'
+import { MotivationRepository } from '../db/repositories/MotivationRepository'
+import { getNativeDatabase } from '../db/sqlite/nativeDatabase'
 import { logger } from './logger'
 
 interface AppProps { trainingLibrary?: TrainingLibrary }
@@ -23,6 +26,26 @@ export function App({ trainingLibrary }: AppProps) {
   const [importResult, setImportResult] = useState<WorkoutImportResult | null>(null)
 
   useEffect(() => { navigateRef.current = navigate }, [navigate])
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+    let disposed = false
+    let removeTap: (() => void) | undefined
+    const synchronize = () => {
+      if (document.visibilityState !== 'visible') return
+      void getNativeDatabase().then((db) => rescueNotifications.synchronize(new MotivationRepository(db)))
+        .catch((cause: unknown) => logger.error('Rescue notification sync failed', cause))
+    }
+    void rescueNotifications.listen(() => navigateRef.current('/')).then((remove) => {
+      if (disposed) remove()
+      else removeTap = remove
+    }).catch((cause: unknown) => logger.error('Rescue notification listener failed', cause))
+    synchronize()
+    document.addEventListener('visibilitychange', synchronize)
+    window.addEventListener('motion:training-changed', synchronize)
+    return () => { disposed = true; removeTap?.(); document.removeEventListener('visibilitychange', synchronize)
+      window.removeEventListener('motion:training-changed', synchronize) }
+  }, [])
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return

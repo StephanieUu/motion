@@ -3,6 +3,7 @@ import { addLocalDays, localDateAtStart } from '@motion/domain'
 import { modeForContext, recommendActivity, recommendWorkout, type DesiredIntensity,
   type Mood, type Novelty, type RecommendationContext, type RecommendationMode } from '@motion/recommendation'
 import { RecommendationRepository, type StoredRecommendation } from '../../db/repositories/RecommendationRepository'
+import { MotivationRepository } from '../../db/repositories/MotivationRepository'
 import { WorkoutRepository, type LibraryWorkout } from '../../db/repositories/WorkoutRepository'
 import type { Database } from '../../db/sqlite/Database'
 import { getNativeDatabase } from '../../db/sqlite/nativeDatabase'
@@ -29,12 +30,14 @@ export class TodayRecommendations {
   private readonly repository: RecommendationRepository
   private readonly execution: TrainingExecution
   private readonly workouts: WorkoutRepository
+  private readonly motivation: MotivationRepository
 
   constructor(db: Database, private readonly clock: () => Date = () => new Date(),
     private readonly rng: () => number = Math.random) {
     this.repository = new RecommendationRepository(db)
     this.execution = new TrainingExecution(db, clock)
     this.workouts = new WorkoutRepository(db)
+    this.motivation = new MotivationRepository(db, clock)
   }
 
   today(): string { return localDateAtStart(this.clock()) }
@@ -81,6 +84,28 @@ export class TodayRecommendations {
     if (!result) return null
     const stored = await this.repository.save(context, result, activeDay && snapshot.run
       ? { runId: snapshot.run.id, originalPlanDayId: activeDay.trainingPlanDayId } : null, inspiration)
+    return { ...stored, workout: snapshot.workouts.find((item) => item.id === result.workoutContentId) ?? null,
+      activityName: base.activities.find((item) => item.id === result.activityTypeId)?.name ?? null }
+  }
+
+  async suggestRescue(): Promise<RecommendationView | null> {
+    const state = await this.motivation.state()
+    if (!state.rescueActive) return null
+    const snapshot = await this.execution.load()
+    if (snapshot.session) throw new Error('Finish the current session before changing workout')
+    const base = await this.repository.context(this.today(), snapshot.workouts)
+    const activeDay = snapshot.run?.status === 'ACTIVE' && snapshot.currentDay &&
+      !snapshot.currentDay.isRestDay && snapshot.currentDay.scheduledLocalDate <= this.today()
+      ? snapshot.currentDay : null
+    const context: RecommendationContext = { ...base, mood: 'TIRED', desiredIntensity: 'LIGHT',
+      durationMin: 5, durationMax: 10, novelty: 'FAMILIAR', equipmentAvailable: false,
+      planActive: !!activeDay, currentWorkoutId: activeDay?.primaryWorkoutId ?? null,
+      recoveryConstrained: true }
+    const mode: RecommendationMode = state.neverMissTwice ? 'RESTART' : 'RESCUE'
+    const result = recommendWorkout(context, mode, this.rng)
+    if (!result) return null
+    const stored = await this.repository.save(context, result, activeDay && snapshot.run
+      ? { runId: snapshot.run.id, originalPlanDayId: activeDay.trainingPlanDayId } : null)
     return { ...stored, workout: snapshot.workouts.find((item) => item.id === result.workoutContentId) ?? null,
       activityName: base.activities.find((item) => item.id === result.activityTypeId)?.name ?? null }
   }

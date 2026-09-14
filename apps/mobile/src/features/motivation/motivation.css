@@ -1,0 +1,24 @@
+.motivation { display: grid; gap: .5rem; padding: .65rem .2rem 1rem; color: var(--color-green-deep); }
+.motivation__summary { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.motivation__week, .motivation__streak { display: grid; gap: .18rem; min-width: 0; font-size: .72rem; }
+.motivation__streak { text-align: right; }
+.motivation__week strong, .motivation__streak strong { font-size: 1rem; line-height: 1.2; }
+.motivation__streak small { font-size: .72rem; font-weight: 500; }
+.motivation__week-nodes { display: flex; gap: .32rem; margin-top: .25rem; }
+.motivation__week-nodes i { width: .55rem; height: .55rem; border: 1px solid var(--color-gold-art); border-radius: 50%; background: var(--color-surface); }
+.motivation__week-nodes i.is-lit { background: var(--color-green-deep); border-color: var(--color-green-deep); }
+.motivation__protection { display: flex; align-items: center; gap: .65rem; padding: .5rem 0 0; border-top: 1px solid var(--color-gold-soft); }
+.motivation__protection > div { display: grid; gap: .1rem; font-size: .7rem; }
+.motivation__protection strong { font-size: .82rem; }
+.motivation__moon { display: block; flex: 0 0 1.7rem; height: 1.7rem; background: url('../../assets/motion-art/motion-crescent.svg') center / contain no-repeat; }
+.motivation__protection button { margin-left: auto; }
+.motivation__protection.is-actionable button { background: var(--color-green-deep); color: var(--color-surface); }
+.motivation button { min-height: 2.5rem; padding: .45rem .8rem; border: 1px solid var(--color-green-deep); border-radius: .35rem; background: var(--color-surface); color: var(--color-green-deep); font: inherit; font-size: .78rem; font-weight: 650; }
+.motivation button:disabled { opacity: .55; }
+.motivation__rescue { position: relative; display: grid; gap: .45rem; padding: 1rem 0; border-top: 1px solid var(--color-gold-art); }
+.motivation__rescue::after { position: absolute; top: .8rem; right: .4rem; width: 3rem; height: 3rem; background: url('../../assets/motion-art/motion-orbit.svg') center / contain no-repeat; content: ''; opacity: .45; }
+.motivation__rescue h2 { max-width: 80%; font-family: var(--font-display); font-size: 1.45rem; }
+.motivation__rescue p, .motivation__notice { margin: 0; color: var(--color-ink-soft); font-size: .78rem; }
+.motivation__actions { display: flex; flex-wrap: wrap; gap: .4rem .6rem; margin-top: .35rem; }
+.motivation__actions button:nth-child(-n+2) { flex: 1 1 calc(50% - .3rem); min-height: 3rem; border-radius: 1.6rem; background: var(--color-green-deep); color: var(--color-surface); }
+.motivation__actions button:nth-child(n+3) { min-height: 2rem; padding: .3rem .25rem; border: 0; background: transparent; color: var(--color-ink-soft); font-size: .74rem; font-weight: 500; text-decoration: underline; text-underline-offset: .2rem; }

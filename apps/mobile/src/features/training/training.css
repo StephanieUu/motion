@@ -522,6 +522,14 @@
 .training-library__heading-row h1 { max-width: 70%; font-size: clamp(2.35rem, 9vw, 3rem); }
 .training-library__add { min-height: 2.8rem; border-radius: .35rem; }
 .training-library__plan-link { margin-top: -.3rem; padding: var(--space-4) var(--space-1); border: 0; border-bottom: 1px solid var(--color-gold-soft); border-radius: 0; background: transparent; }
+.training-library__quick-start { display: grid; gap: var(--space-2); padding: var(--space-3) 0 var(--space-4); border-bottom: 1px solid var(--color-gold-soft); }
+.training-library__quick-start .eyebrow { color: var(--color-gold); }
+.training-library__quick-start-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.training-library__quick-start-row div { display: grid; gap: .2rem; }
+.training-library__quick-start-row strong { font-family: var(--font-display); font-size: 1.2rem; }
+.training-library__quick-start-row span { color: var(--color-ink-soft); font-size: .8rem; }
+.training-library__quick-start-row button { min-height: 2.6rem; padding: .45rem 1rem; border: 1px solid var(--color-green-deep); border-radius: 2rem; background: var(--color-green-deep); color: var(--color-surface); font: inherit; font-weight: 700; }
+.training-library__quick-start-row button:disabled { opacity: .55; }
 .training-library__views, .training-library__mode-switch { gap: var(--space-3); border-bottom-color: var(--color-gold-soft); }
 .training-library__views button, .training-library__mode-switch button { font-size: .82rem; }
 .training-library__search input, .training-library__form input { border-color: var(--color-line); border-radius: .35rem; background: var(--color-surface); }

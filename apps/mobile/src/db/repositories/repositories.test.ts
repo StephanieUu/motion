@@ -1,4 +1,4 @@
-// @vitest-environment node
+﻿// @vitest-environment node
 import { DatabaseSync } from 'node:sqlite'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -17,7 +17,10 @@ import { WorkoutImportRepository } from './WorkoutImportRepository'
 import { TrainingExecution } from '../../features/training/trainingExecution'
 import { TodayRecommendations } from '../../features/today/todayRecommendations'
 import { RecommendationRepository } from './RecommendationRepository'
-import { deriveCurrentPlanProgress, deriveTodayProvenance } from '../../features/today/todayModel'
+import { MotivationRepository } from './MotivationRepository'
+import { rebuildTrainingState } from './rebuildTrainingState'
+import { movements, composeMiniRoutine } from '../../features/motivation/miniRoutine'
+import { deriveCurrentPlanProgress, deriveTodayActivities, deriveTodayProvenance } from '../../features/today/todayModel'
 
 class NodeDriver implements SqlDriver {
   constructor(readonly sqlite: DatabaseSync) {}
@@ -44,6 +47,385 @@ afterEach(() => {
   vi.useRealTimers()
   opened.splice(0).forEach((sqlite) => sqlite.close())
   directories.splice(0).forEach((directory) => rmSync(directory, { recursive: true, force: true }))
+})
+
+describe('M6 motivation, rescue and local data migration', () => {
+  it('loads every completed session for Today across origins with recorded actual durations', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 14, 12))
+    const { db } = await ready()
+    const workouts = new WorkoutRepository(db)
+    const free = await workouts.create({ contentKind: 'FREE_ACTIVITY', sourceType: 'MANUAL',
+      title: '快走', durationMinutes: 30 })
+    const library = await workouts.create({ contentKind: 'FOLLOW_ALONG', sourceType: 'YOUTUBE',
+      title: 'anna hiit', durationMinutes: 20 })
+    const sessions = new TrainingSessionRepository(db)
+    const first = await sessions.start({ workoutContentId: free.id, sessionOrigin: 'FREE_ACTIVITY' })
+    await sessions.complete(first.id, { durationMinutes: 7, completionStatus: 'COMPLETE' })
+    const second = await sessions.start({ workoutContentId: library.id, sessionOrigin: 'EXISTING_LIBRARY' })
+    await sessions.complete(second.id, { durationMinutes: 2, completionStatus: 'COMPLETE' })
+    const snapshot = await new TrainingExecution(db).load()
+    expect(snapshot.completedActivities?.map((item) => item.session.id).sort()).toEqual([first.id, second.id].sort())
+    expect(snapshot.completedActivities?.map((item) => item.origin).sort()).toEqual(['EXISTING_LIBRARY', 'FREE_ACTIVITY'])
+    const view = deriveTodayActivities(snapshot, '2026-09-14')
+    expect(view).toMatchObject({ count: 2, totalMinutes: 9, totalLabel: '9 分钟' })
+    expect(view.entries.map((item) => [item.title, item.actualMinutes]).sort()).toEqual([
+      ['anna hiit', 2], ['快走', 7],
+    ])
+  })
+
+  async function completedOn(db: Database, date: string, origin: 'FREE_ACTIVITY' | 'RESCUE' = 'FREE_ACTIVITY') {
+    const sessions = new TrainingSessionRepository(db)
+    const started = await sessions.start({ sessionOrigin: origin, userSelectedLocalDate: date })
+    return sessions.complete(started.id, { durationMinutes: 6, completionStatus: 'COMPLETE' })
+  }
+
+  it('awards one Protection at seven real active days and rebuilds idempotently', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 20, 12))
+    const { db } = await ready()
+    for (let offset = -6; offset <= 0; offset++) await completedOn(db, addLocalDays('2026-09-20', offset))
+    const motivation = new MotivationRepository(db, () => new Date(2026, 8, 20, 12))
+    expect(await motivation.state()).toMatchObject({ currentStreak: 7, longestStreak: 7,
+      protectionBalance: 1, weeklyGoal: { achieved: 7, target: 5 } })
+    expect((await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM active_days'))[0]?.count).toBe(7)
+    const awards = await db.query<{ source_key: string }>("SELECT source_key FROM streak_protection_events WHERE type='EARNED'")
+    expect(awards).toEqual([{ source_key: 'STREAK:7' }])
+    await db.transaction((tx) => rebuildTrainingState(tx, []))
+    expect(await db.query<{ source_key: string }>("SELECT source_key FROM streak_protection_events WHERE type='EARNED'"))
+      .toEqual(awards)
+  })
+
+  it('does not count a protected date toward the next seven-day award', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 9, 12))
+    const { db } = await ready()
+    for (let day = 1; day <= 7; day++) await completedOn(db, `2026-09-${String(day).padStart(2, '0')}`)
+    const motivation = new MotivationRepository(db)
+    await motivation.useProtection('2026-09-08')
+    vi.setSystemTime(new Date(2026, 8, 15, 12))
+    for (let day = 9; day <= 15; day++) await completedOn(db, `2026-09-${String(day).padStart(2, '0')}`)
+    expect(await motivation.state()).toMatchObject({ currentStreak: 14, protectionBalance: 1 })
+    expect(await db.query<{ source_key: string; local_date: string }>(
+      "SELECT source_key,local_date FROM streak_protection_events WHERE type='EARNED' ORDER BY local_date"))
+      .toEqual([{ source_key: 'STREAK:7', local_date: '2026-09-07' },
+        { source_key: 'STREAK:14', local_date: '2026-09-15' }])
+    expect(await db.query('SELECT * FROM active_days WHERE local_date=?', ['2026-09-08'])).toEqual([])
+  })
+
+  it('requires explicit Protection on the immediately missed date and never counts it as active', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 14, 12))
+    const { db } = await ready()
+    for (let offset = -8; offset <= -2; offset++) await completedOn(db, addLocalDays('2026-09-14', offset))
+    const motivation = new MotivationRepository(db, () => new Date(2026, 8, 14, 12))
+    expect(await motivation.state()).toMatchObject({ currentStreak: 0, protectionBalance: 1,
+      weeklyGoal: { achieved: 0 }, protectionEligibleDate: '2026-09-13' })
+    expect(await db.query('SELECT * FROM active_days WHERE local_date=?', ['2026-09-13'])).toEqual([])
+    await expect(motivation.useProtection('2026-09-12')).rejects.toThrow()
+    await motivation.useProtection('2026-09-13')
+    expect(await motivation.state()).toMatchObject({ currentStreak: 7, protectionBalance: 0,
+      weeklyGoal: { achieved: 0 } })
+    expect(await db.query('SELECT * FROM active_days WHERE local_date=?', ['2026-09-13'])).toEqual([])
+    await expect(motivation.useProtection('2026-09-13')).rejects.toThrow()
+    expect((await db.query<{ count: number }>("SELECT COUNT(*) AS count FROM streak_protection_events WHERE type='USED'"))[0]?.count).toBe(1)
+  })
+
+  it('does not repair a chain after another unprotected miss', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 14, 12))
+    const { db } = await ready()
+    for (let offset = -9; offset <= -3; offset++) await completedOn(db, addLocalDays('2026-09-14', offset))
+    const motivation = new MotivationRepository(db, () => new Date(2026, 8, 14, 12))
+    expect((await motivation.state()).protectionEligibleDate).toBeNull()
+    await expect(motivation.useProtection('2026-09-13')).rejects.toThrow('No continuous streak')
+  })
+
+  it('retains an explicitly spent grant after an earlier session is corrected', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 14, 12))
+    const { db } = await ready()
+    const history = []
+    for (let offset = -8; offset <= -2; offset++) history.push(await completedOn(db, addLocalDays('2026-09-14', offset)))
+    const motivation = new MotivationRepository(db)
+    await motivation.useProtection('2026-09-13')
+    await new TrainingSessionRepository(db).correctCompleted(history[0]!.id, { durationMinutes: 2 })
+    expect((await motivation.state()).protectionBalance).toBe(0)
+    expect(await db.query<{ type: string; source_key: string }>(
+      'SELECT type,source_key FROM streak_protection_events ORDER BY local_date'))
+      .toEqual([{ type: 'EARNED', source_key: 'STREAK:7' },
+        { type: 'USED', source_key: 'STREAK:7' }])
+    await db.transaction((tx) => rebuildTrainingState(tx, []))
+    expect((await db.query<{ count: number }>("SELECT COUNT(*) AS count FROM streak_protection_events WHERE type='EARNED'"))[0]?.count).toBe(1)
+  })
+
+  it('refreshes streak at a local date boundary without a session mutation', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 12, 12))
+    const { db } = await ready()
+    await completedOn(db, '2026-09-12')
+    let at = new Date(2026, 8, 12, 12)
+    const motivation = new MotivationRepository(db, () => at)
+    expect((await motivation.state()).currentStreak).toBe(1)
+    at = new Date(2026, 8, 14, 12)
+    expect((await motivation.state()).currentStreak).toBe(0)
+  })
+
+  it('allows one explicit same-day Protection after Rescue time', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 14, 18, 1))
+    const { db } = await ready()
+    for (let offset = -7; offset <= -1; offset++) await completedOn(db, addLocalDays('2026-09-14', offset))
+    const motivation = new MotivationRepository(db, () => new Date(2026, 8, 14, 18, 1))
+    await motivation.configureRescue(18 * 60, false)
+    expect((await motivation.state()).protectionEligibleDate).toBe('2026-09-14')
+    await motivation.useProtection('2026-09-14')
+    expect(await motivation.state()).toMatchObject({ currentStreak: 7, protectionBalance: 0,
+      weeklyGoal: { achieved: 0 } })
+    expect((await db.query<{ source_key: string }>("SELECT source_key FROM streak_protection_events WHERE type='USED'"))[0]?.source_key).toBe('STREAK:7')
+    expect(await db.query('SELECT * FROM active_days WHERE local_date=?', ['2026-09-14'])).toEqual([])
+  })
+
+  it('uses the configured local time, detects a second missed day, and keeps Rescue calm', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 14, 18, 1))
+    const { db } = await ready()
+    await completedOn(db, '2026-09-12')
+    const motivation = new MotivationRepository(db, () => new Date(2026, 8, 14, 18, 1))
+    await motivation.configureRescue(18 * 60, false)
+    expect(await motivation.state()).toMatchObject({ rescueActive: true, neverMissTwice: true,
+      activeToday: false, protectionBalance: 0 })
+    expect(await db.query('SELECT * FROM active_days WHERE local_date=?', ['2026-09-14'])).toEqual([])
+    expect((await motivation.notificationDates()).length).toBe(0)
+  })
+
+  it('suppresses Rescue after its time on a scheduled Planned Rest day', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 14, 18, 1))
+    const { db } = await ready()
+    const plans = new TrainingPlanRepository(db)
+    const plan = await plans.create({ title: 'Rest today', sourceType: 'MANUAL', days: [
+      { dayIndex: 1, isRestDay: true },
+    ] })
+    await plans.startRun(plan.id, '2026-09-14')
+    expect((await new TrainingExecution(db).load()).currentDay).toMatchObject({
+      isRestDay: true, status: 'SCHEDULED', scheduledLocalDate: '2026-09-14',
+    })
+    const motivation = new MotivationRepository(db)
+    await motivation.configureRescue(18 * 60, false)
+    expect(await motivation.state()).toMatchObject({ plannedRestToday: true, rescueActive: false,
+      activeToday: false, weeklyGoal: { achieved: 0 } })
+    expect(await db.query<{ status: string }>(
+      "SELECT status FROM training_plan_run_days WHERE scheduled_local_date='2026-09-14'"))
+      .toEqual([{ status: 'SCHEDULED' }])
+    expect(await db.query('SELECT * FROM active_days WHERE local_date=?', ['2026-09-14'])).toEqual([])
+  })
+
+  it('shows Rescue after its time without activity or Planned Rest', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 14, 18, 1))
+    const { db } = await ready()
+    const motivation = new MotivationRepository(db)
+    await motivation.configureRescue(18 * 60, false)
+    expect(await motivation.state()).toMatchObject({ plannedRestToday: false, rescueActive: true,
+      activeToday: false })
+  })
+
+  it('allows Rescue after its time when a training plan is only paused', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 14, 18, 1))
+    const { db } = await ready()
+    const plans = new TrainingPlanRepository(db)
+    const plan = await plans.create({ title: 'Paused training', sourceType: 'MANUAL', days: [{ dayIndex: 1 }] })
+    const run = await plans.startRun(plan.id, '2026-09-14')
+    await plans.pause(run)
+    const motivation = new MotivationRepository(db)
+    await motivation.configureRescue(18 * 60, false)
+    expect(await motivation.state()).toMatchObject({ plannedRestToday: false, rescueActive: true,
+      activeToday: false, weeklyGoal: { achieved: 0 } })
+  })
+
+  it('keeps Rescue hidden after an active session even if the plan is later paused', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 14, 18, 1))
+    const { db } = await ready()
+    await completedOn(db, '2026-09-14')
+    const plans = new TrainingPlanRepository(db)
+    const plan = await plans.create({ title: 'Paused after training', sourceType: 'MANUAL',
+      days: [{ dayIndex: 1 }] })
+    const run = await plans.startRun(plan.id, '2026-09-14')
+    await plans.pause(run)
+    const motivation = new MotivationRepository(db)
+    await motivation.configureRescue(18 * 60, false)
+    expect(await motivation.state()).toMatchObject({ activeToday: true, plannedRestToday: false,
+      rescueActive: false })
+  })
+
+  it('schedules only future, non-active, non-rest dates using the saved local time', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 14, 10))
+    const { db } = await ready()
+    const motivation = new MotivationRepository(db, () => new Date(2026, 8, 14, 10))
+    await motivation.configureRescue(18 * 60 + 30, true)
+    expect((await motivation.notificationDates(2)).map((item) => [item.localDate, item.at.getHours(), item.at.getMinutes()]))
+      .toEqual([['2026-09-14', 18, 30], ['2026-09-15', 18, 30]])
+    await completedOn(db, '2026-09-14')
+    const plans = new TrainingPlanRepository(db)
+    const plan = await plans.create({ title: 'Rest tomorrow', sourceType: 'MANUAL', days: [
+      { dayIndex: 1, isRestDay: true },
+    ] })
+    await plans.startRun(plan.id, '2026-09-15')
+    expect(await motivation.notificationDates(2)).toEqual([])
+  })
+
+  it('retains an elapsed but pending local alarm on an eligible paused day', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 16, 14, 20))
+    const { db } = await ready()
+    const plans = new TrainingPlanRepository(db)
+    const plan = await plans.create({ title: 'Paused', sourceType: 'MANUAL', days: [{ dayIndex: 1 }] })
+    const run = await plans.startRun(plan.id, '2026-09-16')
+    await plans.pause(run)
+    const motivation = new MotivationRepository(db)
+    await motivation.configureRescue(14 * 60 + 30, true)
+    expect((await motivation.notificationDates(1)).map((item) => item.localDate)).toEqual(['2026-09-16'])
+    vi.setSystemTime(new Date(2026, 8, 16, 14, 31))
+    expect(await motivation.notificationDates(1)).toEqual([])
+    expect((await motivation.notificationDates(1, true)).map((item) => item.localDate))
+      .toEqual(['2026-09-16'])
+    await completedOn(db, '2026-09-16')
+    expect(await motivation.notificationDates(1, true)).toEqual([])
+  })
+
+  it('uses the current device-local date again after a manual date change', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 14, 14, 20))
+    const { db } = await ready()
+    const motivation = new MotivationRepository(db)
+    await motivation.configureRescue(14 * 60 + 30, true)
+    expect((await motivation.notificationDates(1)).map((item) => item.localDate)).toEqual(['2026-09-14'])
+    vi.setSystemTime(new Date(2026, 8, 16, 14, 20))
+    expect((await motivation.notificationDates(1)).map((item) => item.localDate)).toEqual(['2026-09-16'])
+  })
+
+  it('suppresses a previously eligible reminder when today becomes Planned Rest or reminders are disabled', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 16, 14, 20))
+    const { db } = await ready()
+    const motivation = new MotivationRepository(db)
+    await motivation.configureRescue(14 * 60 + 30, true)
+    expect((await motivation.notificationDates(1)).map((item) => item.localDate)).toEqual(['2026-09-16'])
+    const plans = new TrainingPlanRepository(db)
+    const plan = await plans.create({ title: 'Rest', sourceType: 'MANUAL',
+      days: [{ dayIndex: 1, isRestDay: true }] })
+    await plans.startRun(plan.id, '2026-09-16')
+    expect(await motivation.notificationDates(1, true)).toEqual([])
+    await motivation.configureRescue(14 * 60 + 30, false)
+    expect(await motivation.notificationDates(1, true)).toEqual([])
+  })
+
+  it('does not treat a paused plan or an ordinary missed day as preservation', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 14, 12))
+    const { db } = await ready()
+    await completedOn(db, '2026-09-12')
+    const plans = new TrainingPlanRepository(db)
+    const plan = await plans.create({ title: 'Paused', sourceType: 'MANUAL', days: [{ dayIndex: 1 }] })
+    const run = await plans.startRun(plan.id, '2026-09-13')
+    await plans.pause(run, new Date(2026, 8, 13, 12))
+    const state = await new MotivationRepository(db).state()
+    expect(state.currentStreak).toBe(0)
+    expect(state.weeklyGoal.achieved).toBe(0)
+    expect(await db.query('SELECT * FROM active_days WHERE local_date=?', ['2026-09-13'])).toEqual([])
+  })
+
+  it('uses the configured first day of week for the independent goal', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 14, 12))
+    const { db } = await ready()
+    await db.run('UPDATE app_preference SET first_day_of_week=0 WHERE singleton_key=1')
+    await completedOn(db, '2026-09-13')
+    expect((await new MotivationRepository(db).state()).weeklyGoal).toEqual({
+      achieved: 1, target: 5, weekStart: '2026-09-13',
+    })
+  })
+
+  it('routes a short library Rescue through M5 and qualifies six completed minutes', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 14, 18, 1))
+    const { db } = await ready()
+    const workout = await new WorkoutRepository(db).create({ contentKind: 'FOLLOW_ALONG',
+      sourceType: 'MANUAL', durationMinutes: 8, estimatedIntensity: 'LOW', requiresEquipment: false })
+    await new MotivationRepository(db).configureRescue(18 * 60, false)
+    const recommendations = new TodayRecommendations(db, () => new Date(2026, 8, 14, 18, 1), () => 0.5)
+    const suggested = await recommendations.suggestRescue()
+    expect(suggested?.result).toMatchObject({ mode: 'RESTART', workoutContentId: workout.id })
+    await recommendations.accept(suggested!)
+    const execution = new TrainingExecution(db, () => new Date(2026, 8, 14, 18, 1))
+    const started = await execution.startWorkout(await execution.load())
+    expect((await db.query<{ session_origin: string }>('SELECT session_origin FROM training_sessions WHERE id=?', [started.id]))[0]?.session_origin).toBe('RESCUE')
+    await execution.completeWorkout(started.id, 6, 'MOSTLY_COMPLETE')
+    expect((await db.query<{ qualification_type: string }>('SELECT qualification_type FROM active_days WHERE local_date=?', ['2026-09-14']))[0]?.qualification_type).toBe('RESCUE_TRAINING')
+    expect((await new MotivationRepository(db).state()).weeklyGoal.achieved).toBe(1)
+  })
+
+  it('composes an immutable short routine and only qualifies confirmed required steps', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 14, 12))
+    const { db } = await ready()
+    expect(movements.length).toBeGreaterThanOrEqual(20)
+    expect(movements.length).toBeLessThanOrEqual(30)
+    expect(composeMiniRoutine(0, 5).map((item) => item.phase)).toEqual([
+      'WARM_UP', 'MAIN', 'MAIN', 'MAIN', 'COOL_DOWN'])
+    const execution = new TrainingExecution(db, () => new Date(2026, 8, 14, 12))
+    const first = await execution.startMiniRoutine()
+    const versionId = first.miniRoutineVersionId!
+    expect((await execution.load()).miniRoutine?.durationMinutes).toBeLessThan(6)
+    await execution.completeMiniRoutine(first.id, false)
+    expect((await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM active_days'))[0]?.count).toBe(0)
+    const second = await execution.startMiniRoutine()
+    await execution.completeMiniRoutine(second.id, true)
+    expect((await execution.sessions.get(second.id))?.qualifiesForActiveDay).toBe(true)
+    expect((await db.query<{ mini_routine_version_id: string }>('SELECT mini_routine_version_id FROM training_sessions WHERE id=?', [second.id]))[0]?.mini_routine_version_id).toBe(second.miniRoutineVersionId)
+    await expect(db.run('UPDATE mini_routine_items SET movement_name=? WHERE mini_routine_version_id=?',
+      ['Changed', versionId])).rejects.toThrow()
+  })
+
+  it('rebuilds weekly, streak and unused award after historical correction or deletion', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 20, 12))
+    const { db } = await ready()
+    const sessions = []
+    for (let offset = -6; offset <= 0; offset++) sessions.push(await completedOn(db, addLocalDays('2026-09-20', offset)))
+    await new TrainingSessionRepository(db).correctCompleted(sessions[0]!.id, { durationMinutes: 3 })
+    expect((await new TrainingSessionRepository(db).get(sessions[0]!.id))?.qualifiesForActiveDay).toBe(false)
+    expect(await new MotivationRepository(db).state()).toMatchObject({ currentStreak: 6,
+      protectionBalance: 0, weeklyGoal: { achieved: 6 } })
+    expect((await db.query<{ count: number }>("SELECT COUNT(*) AS count FROM streak_protection_events WHERE type='EARNED'"))[0]?.count).toBe(0)
+    await new TrainingSessionRepository(db).remove(sessions[1]!.id)
+    expect(await new MotivationRepository(db).state()).toMatchObject({ currentStreak: 5,
+      weeklyGoal: { achieved: 5 } })
+    expect(await db.query('PRAGMA foreign_key_check')).toEqual([])
+  })
+
+  it('upgrades a populated version-five database without enabling notifications', async () => {
+    const { db } = open()
+    expect(await migrateDatabase(db, migrations.slice(0, 5))).toBe(5)
+    await db.run(`INSERT INTO workout_contents (id,content_kind,title,source_type,created_at,updated_at)
+      VALUES ('m5-workout','FOLLOW_ALONG','Saved','MANUAL','2026-01-01','2026-01-01')`)
+    await db.run(`INSERT INTO training_plans (id,title,source_type,created_at)
+      VALUES ('m5-plan','Saved plan','MANUAL','2026-01-01')`)
+    await db.run(`INSERT INTO training_plan_days (id,training_plan_id,day_index,is_rest_day)
+      VALUES ('m5-plan-day','m5-plan',1,0)`)
+    await db.run(`INSERT INTO training_plan_day_items (id,training_plan_day_id,workout_content_id,sort_order,role)
+      VALUES ('m5-plan-item','m5-plan-day','m5-workout',0,'PRIMARY')`)
+    await db.run(`INSERT INTO training_plan_runs (id,training_plan_id,started_on,status,current_day_index)
+      VALUES ('m5-run','m5-plan','2026-09-12','COMPLETED',1)`)
+    await db.run(`INSERT INTO training_plan_run_days
+      (id,training_plan_run_id,training_plan_day_id,original_scheduled_local_date,
+        scheduled_local_date,status,execution_kind,plan_equivalence,updated_at)
+      VALUES ('m5-run-day','m5-run','m5-plan-day','2026-09-12','2026-09-12','COMPLETED','PLANNED','FULL','2026-09-12')`)
+    const otherId = (await db.query<{ id: string }>("SELECT id FROM activity_types WHERE system_key='OTHER'"))[0]!.id
+    await db.run(`INSERT INTO training_sessions
+      (id,local_date,local_date_source,started_at,ended_at,duration_minutes,workout_content_id,
+        activity_type_id,training_plan_run_day_id,session_origin,lifecycle_status,completion_status,
+        qualifies_for_active_day,created_at,updated_at)
+      VALUES ('m5-session','2026-09-12','USER_SELECTED','2026-09-12','2026-09-12',8,
+        'm5-workout',?,'m5-run-day','PLAN','COMPLETED','COMPLETE',1,'2026-09-12','2026-09-12')`, [otherId])
+    await db.run(`INSERT INTO daily_recommendations
+      (id,local_date,recommendation_mode,recommendation_source,selected_workout_content_id,status,created_at)
+      VALUES ('m5-rec','2026-09-14','NORMAL','LIBRARY','m5-workout','ACCEPTED','2026-09-14')`)
+    await db.run(`INSERT INTO today_pending_selections (local_date,workout_content_id,selected_at)
+      VALUES ('2026-09-14','m5-workout','2026-09-14')`)
+    expect(await migrateDatabase(db)).toBe(6)
+    expect((await db.query<{ rescue_notifications_enabled: number; rescue_local_minute_of_day: number | null }>(
+      'SELECT rescue_notifications_enabled,rescue_local_minute_of_day FROM app_preference'))[0])
+      .toEqual({ rescue_notifications_enabled: 0, rescue_local_minute_of_day: null })
+    expect((await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM today_pending_selections'))[0]?.count).toBe(1)
+    expect((await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM daily_recommendations'))[0]?.count).toBe(1)
+    expect((await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM training_plans'))[0]?.count).toBe(1)
+    expect((await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM training_plan_run_days'))[0]?.count).toBe(1)
+    expect((await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM training_sessions'))[0]?.count).toBe(1)
+    expect(await db.query('PRAGMA foreign_key_check')).toEqual([])
+  })
 })
 
 describe('M5 recommendation persistence and execution', () => {
@@ -97,7 +479,7 @@ describe('M5 recommendation persistence and execution', () => {
     await service.accept(suggestion!)
     first.sqlite.close(); opened.splice(opened.indexOf(first.sqlite), 1)
     const second = open(file)
-    expect(await migrateDatabase(second.db)).toBe(5)
+    expect(await migrateDatabase(second.db)).toBe(6)
     const restored = new TodayRecommendations(second.db, clock)
     expect((await restored.latest())?.status).toBe('ACCEPTED')
     expect((await restored.latest())?.result.workoutContentId).toBe(suggestion!.result.workoutContentId)
@@ -328,7 +710,16 @@ describe('M5 recommendation persistence and execution', () => {
     const started = await execution.startWorkout(selected)
     expect(started.trainingPlanRunDayId).toBeNull()
     expect(deriveTodayProvenance(await execution.load(), '2026-09-13')).toMatchObject({ kind: 'REST_EXTRA' })
-    await execution.completeWorkout(started.id, 20, 'COMPLETE')
+    await execution.completeWorkout(started.id, 1, 'COMPLETE')
+    const completedSnapshot = await execution.load()
+    expect(completedSnapshot.completedActivities).toMatchObject([{
+      session: { id: started.id, durationMinutes: 1, qualifiesForActiveDay: false },
+      origin: 'FREE_ACTIVITY', recommendationSource: null,
+    }])
+    expect(deriveTodayActivities(completedSnapshot, '2026-09-13').entries[0]).toMatchObject({
+      title: '快走', provenance: '休息日加练', actualMinutes: 1, durationLabel: '1 分钟',
+    })
+    expect(await db.query('SELECT * FROM active_days WHERE local_date=?', ['2026-09-13'])).toEqual([])
     const restDay = (await execution.plans.getRunDayViews(runId))[0]!
     expect(restDay).toMatchObject({ isRestDay: true, primaryWorkoutId: null,
       status: 'SCHEDULED', planEquivalence: null })
@@ -345,6 +736,26 @@ describe('M5 recommendation persistence and execution', () => {
       isRestDay: true, primaryWorkoutId: null, status: 'PLANNED_REST', planEquivalence: null })
     expect(deriveCurrentPlanProgress(await restoredExecution.load())).toMatchObject({
       totalDays: 2, completedTraining: 0, totalTraining: 1 })
+  })
+
+  it('qualifies normal workouts from recorded duration rather than estimated content duration', async () => {
+    const { db } = await ready()
+    const workout = await new WorkoutRepository(db).create({ contentKind: 'FOLLOW_ALONG',
+      sourceType: 'MANUAL', title: 'anna hiit', durationMinutes: 20 })
+    const execution = new TrainingExecution(db, clock)
+    await execution.selectWorkout(workout.id)
+    const short = await execution.startWorkout(await execution.load())
+    expect(await execution.completeWorkout(short.id, 1, 'COMPLETE')).toMatchObject({
+      durationMinutes: 1, qualifiesForActiveDay: false,
+    })
+    expect(await db.query('SELECT * FROM active_days WHERE local_date=?', ['2026-09-13'])).toEqual([])
+    await execution.selectWorkout(workout.id)
+    const enough = await execution.startWorkout(await execution.load())
+    expect(await execution.completeWorkout(enough.id, 6, 'COMPLETE')).toMatchObject({
+      durationMinutes: 6, qualifiesForActiveDay: true,
+    })
+    expect((await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM active_days WHERE local_date=?',
+      ['2026-09-13']))[0]?.count).toBe(1)
   })
 
   it('restores chronological and completed-training progress after database reopen', async () => {
@@ -385,8 +796,8 @@ describe('M1 migrations', () => {
   it('upgrades an M0 database, seeds all activity types and preserves the probe', async () => {
     const { db, sqlite } = open()
     sqlite.exec("CREATE TABLE m0_storage_probe (probe_key TEXT PRIMARY KEY, probe_value TEXT, created_at TEXT); INSERT INTO m0_storage_probe VALUES ('installation','retained','2026-01-01');")
-    expect(await migrateDatabase(db)).toBe(5)
-    expect(await migrateDatabase(db)).toBe(5)
+    expect(await migrateDatabase(db)).toBe(6)
+    expect(await migrateDatabase(db)).toBe(6)
     expect((await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM activity_types'))[0]?.count).toBe(19)
     expect((await db.query<{ id: string }>("SELECT id FROM activity_types WHERE system_key='OTHER'"))[0]?.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
     expect((await db.query<{ probe_value: string }>('SELECT probe_value FROM m0_storage_probe'))[0]?.probe_value).toBe('retained')
@@ -399,7 +810,7 @@ describe('M1 migrations', () => {
     const { db, sqlite } = open()
     sqlite.exec(migrations[0]!.sql)
     sqlite.exec("PRAGMA user_version=1; INSERT INTO activity_types VALUES ('old-type','CUSTOM','Custom',0,1); INSERT INTO workout_contents (id,content_kind,source_type,primary_activity_type_id,created_at,updated_at) VALUES ('old-workout','FOLLOW_ALONG','MANUAL','old-type','2026-01-01','2026-01-01'); INSERT INTO training_sessions (id,local_date,local_date_source,started_at,ended_at,duration_minutes,workout_content_id,activity_type_id,session_origin,lifecycle_status,completion_status,created_at,updated_at) VALUES ('old-session','2026-01-01','USER_SELECTED','2026-01-01','2026-01-01',10,'old-workout','old-type','EXISTING_LIBRARY','COMPLETED','COMPLETE','2026-01-01','2026-01-01');")
-    expect(await migrateDatabase(db)).toBe(5)
+    expect(await migrateDatabase(db)).toBe(6)
     expect((await db.query<{ workout_content_id: string }>('SELECT workout_content_id FROM training_sessions WHERE id=?', ['old-session']))[0]?.workout_content_id).toBe('old-workout')
     expect(await db.query('PRAGMA foreign_key_check')).toEqual([])
   })
@@ -409,7 +820,7 @@ describe('M1 migrations', () => {
     sqlite.exec(migrations[0]!.sql)
     sqlite.exec(migrations[1]!.sql)
     sqlite.exec("PRAGMA user_version=2; INSERT INTO workout_contents (id,content_kind,source_type,created_at,updated_at) VALUES ('saved-workout','FOLLOW_ALONG','MANUAL','2026-01-01','2026-01-01');")
-    expect(await migrateDatabase(db)).toBe(5)
+    expect(await migrateDatabase(db)).toBe(6)
     expect((await db.query<{ locale: string }>('SELECT locale FROM app_preference'))[0]?.locale).toBe('zh-CN')
     expect((await db.query<{ name: string }>("SELECT name FROM activity_types WHERE system_key='OTHER'"))[0]?.name).toBe('其他')
     expect((await db.query<{ id: string }>('SELECT id FROM workout_contents WHERE id=?', ['saved-workout']))[0]?.id).toBe('saved-workout')
@@ -419,7 +830,7 @@ describe('M1 migrations', () => {
     const { db, sqlite } = open()
     for (const step of migrations.slice(0, 4)) sqlite.exec(step.sql)
     sqlite.exec("PRAGMA user_version=4; INSERT INTO workout_contents (id,content_kind,source_type,created_at,updated_at) VALUES ('m2-workout','FOLLOW_ALONG','BILIBILI','2026-01-01','2026-01-01'); INSERT INTO workout_preferences (workout_content_id,explicit_preference,updated_at) VALUES ('m2-workout','LOVE','2026-01-01');")
-    expect(await migrateDatabase(db)).toBe(5)
+    expect(await migrateDatabase(db)).toBe(6)
     expect((await new WorkoutRepository(db).listLibrary()).find((item) => item.id === 'm2-workout'))
       .toMatchObject({ userPreference: 'LOVE', userVisibility: 'ACTIVE' })
     expect(await db.query('PRAGMA foreign_key_check')).toEqual([])
@@ -627,8 +1038,8 @@ describe('M2 training library persistence', () => {
     const { db, sqlite } = open()
     for (const migration of migrations.filter((item) => item.version <= 3)) sqlite.exec(migration.sql)
     sqlite.exec("PRAGMA user_version=3; INSERT INTO workout_contents (id,content_kind,source_type,created_at,updated_at) VALUES ('old-workout','FOLLOW_ALONG','MANUAL','2026-01-01','2026-01-01');")
-    expect(await migrateDatabase(db)).toBe(5)
-    expect(await migrateDatabase(db)).toBe(5)
+    expect(await migrateDatabase(db)).toBe(6)
+    expect(await migrateDatabase(db)).toBe(6)
     expect((await new WorkoutRepository(db).get('old-workout'))?.id).toBe('old-workout')
     await new WorkoutRepository(db).setPreference('old-workout', 'LIKE')
     expect((await new WorkoutRepository(db).listLibrary())[0]?.userPreference).toBe('LIKE')

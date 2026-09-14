@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { LibraryWorkout } from '../../db/repositories/WorkoutRepository'
 import type { PlanRunDayView } from '../../db/repositories/TrainingPlanRepository'
 import type { ExecutionSnapshot } from '../training/trainingExecution'
-import { deriveCurrentPlanProgress, deriveTodayProvenance } from './todayModel'
+import { deriveCurrentPlanProgress, deriveTodayActivities, deriveTodayProvenance,
+  formatActualMinutes } from './todayModel'
 
 const planned: LibraryWorkout = { id: 'planned', contentKind: 'FOLLOW_ALONG', title: '计划训练',
   description: null, sourceType: 'BILIBILI', sourceUrl: null, durationMinutes: 20,
@@ -23,6 +24,46 @@ function snapshot(changes: Partial<ExecutionSnapshot> = {}): ExecutionSnapshot {
 }
 
 describe('Today provenance and current plan progress', () => {
+  it('presents every completed origin today with actual minutes and preserved plan/rest provenance', () => {
+    const rest = { ...day, id: 'rest', isRestDay: true, primaryWorkoutId: null }
+    const session = (id: string, durationMinutes: number, workoutContentId: string,
+      trainingPlanRunDayId: string | null = null, miniRoutineVersionId: string | null = null) => ({
+        id, localDate: '2026-09-13', startedAt: '2026-09-13T10:00:00Z', endedAt: '2026-09-13T10:10:00Z',
+        durationMinutes, workoutContentId, activityTypeId: 'other', trainingPlanRunDayId,
+        miniRoutineVersionId, lifecycleStatus: 'COMPLETED' as const, completionStatus: 'COMPLETE' as const,
+        qualifiesForActiveDay: durationMinutes >= 6,
+      })
+    const current = snapshot({ runDays: [day], completedActivities: [
+      { session: session('planned', 12, planned.id, day.id), origin: 'PLAN', recommendationSource: null },
+      { session: session('replacement', 8, actual.id, day.id), origin: 'EXISTING_LIBRARY',
+        recommendationSource: 'LIBRARY' },
+      { session: session('manual', 2, actual.id), origin: 'EXISTING_LIBRARY', recommendationSource: null },
+      { session: session('free', 3, actual.id), origin: 'FREE_ACTIVITY', recommendationSource: null },
+      { session: session('mini', 3.9166666666666665, actual.id, null, 'mini-v1'),
+        origin: 'EXISTING_LIBRARY', recommendationSource: null },
+      { session: session('rescue', 4, actual.id), origin: 'RESCUE', recommendationSource: 'RESCUE' },
+    ] })
+    const result = deriveTodayActivities(current, '2026-09-13')
+    expect(result.count).toBe(6)
+    expect(result.entries.map((entry) => entry.provenance)).toEqual([
+      '计划训练', '推荐替换', '自己选择', '新的运动', '小练习', '今天加练',
+    ])
+    expect(result.entries[4]).toMatchObject({ actualMinutes: 3.9166666666666665,
+      durationLabel: '约 4 分钟' })
+    const restResult = deriveTodayActivities(snapshot({ runDays: [rest], currentDay: rest,
+      completedActivities: [{ session: session('rest-extra', 1, actual.id),
+        origin: 'EXISTING_LIBRARY', recommendationSource: null }] }), '2026-09-13')
+    expect(restResult.entries[0]).toMatchObject({ provenance: '休息日加练', actualMinutes: 1,
+      durationLabel: '1 分钟' })
+    const restMini = deriveTodayActivities(snapshot({ runDays: [rest], currentDay: rest,
+      completedActivities: [{ session: session('voluntary-mini', 4, actual.id, null, 'mini-v2'),
+        origin: 'EXISTING_LIBRARY', recommendationSource: null }] }), '2026-09-13')
+    expect(restMini.entries[0]).toMatchObject({ provenance: '休息日加练 · 小练习', actualMinutes: 4 })
+    expect(formatActualMinutes(3.9166666666666665)).not.toContain('3.9166666666666665')
+  })
+  it('has no activity entries when no completed session belongs to the device-local day', () => {
+    expect(deriveTodayActivities(snapshot(), '2026-09-13')).toMatchObject({ count: 0, entries: [] })
+  })
   it('labels the original plan workout with its plan day', () => {
     expect(deriveTodayProvenance(snapshot(), '2026-09-13')).toMatchObject({
       kind: 'PLAN_ORIGINAL', planDayIndex: 1 })
