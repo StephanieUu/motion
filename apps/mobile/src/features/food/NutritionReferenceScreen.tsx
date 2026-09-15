@@ -9,6 +9,7 @@ import { activityLabel, activityOptions, nutritionSetupFromDraft, profileDraft,
   type NutritionProfileDraft } from './nutritionProfile'
 import { openNutritionService, type NutritionService } from './nutritionService'
 import { EditorialDateField, EditorialNumberField } from './EditorialProfileFields'
+import { compactPlanLabel } from './nutritionPlanPresentation'
 import './nutritionReference.css'
 import './editorialProfileFields.css'
 
@@ -51,9 +52,11 @@ export function NutritionReferenceScreen({ suppliedService }: { suppliedService?
     {state ? <section className="nutrition-reference__basis"><span>基于</span>
       <p>{state.weight === null ? '体重尚未记录' : `${state.weight} kg`} · {state.profile?.height_cm ?? '—'} cm{age === null ? '' : ` · ${age} 岁`}<br />
         {activityLabel(state.profile?.activity_level)} · {state.profile?.goal_type === 'FAT_LOSS' ? '减脂' : '维持体重'}</p></section> : null}
-    <p className="nutrition-reference__note">你可以随时调整个人资料，<br />以更新你的营养参考。</p>
-    <div className="nutrition-page__action"><button type="button" onClick={() => navigate('/food/profile')}>
-      <span>调整个人资料</span><AppIcon name="arrow" /></button></div>
+    {state ? <section className="nutrition-reference__plan"><span>当前方案</span>
+      <strong>{state.day.planRun ? compactPlanLabel(state.day.planRun, state.day.target?.day_type) : '尚未选择'}</strong>
+      <button type="button" onClick={() => navigate(state.day.planRun ? '/food/plan' : '/food/plan/select')}>
+        {state.day.planRun ? '查看与调整方案' : '选择营养方案'} →</button></section> : null}
+    <button className="nutrition-reference__profile-link" type="button" onClick={() => navigate('/food/profile')}>调整个人资料 →</button>
   </main>
 }
 

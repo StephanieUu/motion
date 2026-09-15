@@ -6,6 +6,7 @@ import { AppShell } from '../components/AppShell'
 import { BodyScreen } from '../features/body/BodyScreen'
 import { FoodScreen } from '../features/food/FoodScreen'
 import { NutritionProfileScreen, NutritionReferenceScreen } from '../features/food/NutritionReferenceScreen'
+import { NutritionPlanManagementScreen, NutritionPlanSelectionScreen } from '../features/food/NutritionPlanScreens'
 import { OnboardingFlow } from '../features/onboarding/OnboardingFlow'
 import { openOnboardingService, type OnboardingService } from '../features/onboarding/onboardingService'
 import { MeScreen } from '../features/me/MeScreen'
@@ -103,9 +104,12 @@ export function App({ trainingLibrary, onboardingService }: AppProps) {
   if (onboarding === 'SHOW' && activeOnboardingService) return <OnboardingFlow service={activeOnboardingService}
     onExit={() => setOnboarding('HIDE')} />
 
-  if (location.pathname === '/food/reference' || location.pathname === '/food/profile') return <Routes>
+  if (location.pathname.startsWith('/food/reference') || location.pathname.startsWith('/food/profile') ||
+    location.pathname.startsWith('/food/plan')) return <Routes>
     <Route path="/food/reference" element={<NutritionReferenceScreen />} />
     <Route path="/food/profile" element={<NutritionProfileScreen />} />
+    <Route path="/food/plan" element={<NutritionPlanManagementScreen />} />
+    <Route path="/food/plan/select" element={<NutritionPlanSelectionScreen />} />
   </Routes>
 
   return <AppShell>

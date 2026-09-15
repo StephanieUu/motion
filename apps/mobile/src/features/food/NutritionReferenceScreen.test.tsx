@@ -24,7 +24,7 @@ describe('nutrition reference screens', () => {
     </Routes></MemoryRouter>)
     expect(await screen.findByText('1,650–1,900')).toBeVisible()
     expect(screen.getByText(/70 kg · 170 cm/)).toBeVisible()
-    await user.click(screen.getByRole('button', { name: '调整个人资料' }))
+    await user.click(screen.getByRole('button', { name: '调整个人资料 →' }))
     expect(await screen.findByRole('heading', { name: '编辑个人资料' })).toBeVisible()
   })
 

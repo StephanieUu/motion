@@ -7,6 +7,35 @@ export type MealType = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK' | 'OTHER'
 export type EstimationMethod = 'EXACT_WEIGHT' | 'PACKAGE_LABEL' | 'FOOD_DATABASE' | 'TEXT_AI' | 'PHOTO_AI' | 'ROUGH_CALORIE' | 'MANUAL'
 export type ConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW' | 'ROUGH'
 export const NUTRITION_CALCULATION_VERSION = 'NASEM_2023_M7_V1'
+export const NUTRITION_PLAN_CALCULATION_VERSION = 'NASEM_2023_M8_V1'
+export const NUTRITION_PLAN_CONFIG_VERSION = 1
+export type NutritionBaseStrategy = 'STABLE_FAT_LOSS' | 'FOCUSED_FAT_LOSS' | 'MAINTENANCE'
+export type NutritionPlanStatus = 'SCHEDULED' | 'ACTIVE' | 'ENDED'
+export type NutritionDayType = 'NORMAL' | 'MAINTENANCE' | 'FLEXIBLE'
+
+export interface NutritionPlanConfig {
+  baseStrategy: NutritionBaseStrategy
+  highProtein: boolean
+  treEnabled: boolean
+  treStartLocalTime: string | null
+  treWindowMinutes: number | null
+  flexibleWeekday: number | null
+}
+
+export interface NutritionPlanTargetInput extends Omit<TargetInput, 'goal'> {
+  planRunId: string
+  config: NutritionPlanConfig
+}
+
+export interface CalculatedPlanTarget {
+  caloriesMin: number
+  caloriesMax: number
+  proteinMinG: number
+  proteinMaxG: number
+  dayType: NutritionDayType
+  calculationVersion: typeof NUTRITION_PLAN_CALCULATION_VERSION
+  rationale: Record<string, unknown>
+}
 
 export interface TargetInput {
   localDate: string
@@ -68,6 +97,73 @@ export function estimatedEer(sex: NutritionSex, level: ActivityLevel, age: numbe
 }
 
 const round50 = (value: number) => Math.round(value / 50) * 50
+
+export function validateNutritionPlanConfig(config: NutritionPlanConfig): void {
+  if (!(['STABLE_FAT_LOSS', 'FOCUSED_FAT_LOSS', 'MAINTENANCE'] as const).includes(config.baseStrategy))
+    throw new Error('Invalid nutrition base strategy')
+  if (config.treEnabled) {
+    if (!config.treStartLocalTime || !/^([01]\d|2[0-3]):[0-5]\d$/.test(config.treStartLocalTime))
+      throw new Error('TRE start time is required')
+    if (config.treWindowMinutes === null || config.treWindowMinutes < 480 || config.treWindowMinutes > 720 ||
+      config.treWindowMinutes % 60 !== 0) throw new Error('TRE window must be 8–12 hours')
+  } else if (config.treStartLocalTime !== null || config.treWindowMinutes !== null) {
+    throw new Error('Disabled TRE must not retain a window')
+  }
+  if (config.flexibleWeekday !== null &&
+    (!Number.isInteger(config.flexibleWeekday) || config.flexibleWeekday < 0 || config.flexibleWeekday > 6))
+    throw new Error('Flexible weekday must be between 0 and 6')
+  if (config.baseStrategy === 'MAINTENANCE' && config.flexibleWeekday !== null)
+    throw new Error('Maintenance does not support a flexible day')
+}
+
+function nutritionInputs(input: Omit<TargetInput, 'goal'>, useTargetWeight: boolean) {
+  const { birthDate, sex, heightCm, activityLevel, weight, targetWeightKg, localDate } = input
+  if (!birthDate || !sex || !heightCm || !activityLevel || !weight || !validLocalDate(localDate) ||
+    weight.localDate > localDate || !Number.isFinite(heightCm) || heightCm <= 0 ||
+    !Number.isFinite(weight.weightKg) || weight.weightKg <= 0 || !(sex in coefficients) ||
+    !(activityLevel in coefficients[sex])) return null
+  const age = ageOnDate(birthDate, localDate)
+  if (age === null || age < 19) return null
+  const eer = estimatedEer(sex, activityLevel, age, heightCm, weight.weightKg)
+  const validTargetWeight = useTargetWeight && targetWeightKg !== null && Number.isFinite(targetWeightKg) && targetWeightKg > 0 &&
+    targetWeightKg < weight.weightKg && targetWeightKg >= 18.5 * (heightCm / 100) ** 2
+  return { age, eer, reference: validTargetWeight ? targetWeightKg : weight.weightKg,
+    referenceSource: validTargetWeight ? 'TARGET_WEIGHT' as const : 'CURRENT_WEIGHT' as const }
+}
+
+export function calculateNutritionPlanTarget(input: NutritionPlanTargetInput): CalculatedPlanTarget | null {
+  validateNutritionPlanConfig(input.config)
+  const facts = nutritionInputs(input, input.config.baseStrategy !== 'MAINTENANCE')
+  if (!facts) return null
+  const weekday = new Date(`${input.localDate}T00:00:00Z`).getUTCDay()
+  const flexible = input.config.flexibleWeekday === weekday && input.config.baseStrategy !== 'MAINTENANCE'
+  const effectiveStrategy: NutritionBaseStrategy = flexible ? 'MAINTENANCE' : input.config.baseStrategy
+  const deficit: [number, number] | null = effectiveStrategy === 'STABLE_FAT_LOSS' ? [500, 300]
+    : effectiveStrategy === 'FOCUSED_FAT_LOSS' ? [750, 500] : null
+  const floor = deficit ? (input.sex === 'FEMALE' ? 1200 : 1500) : null
+  const caloriesMin = deficit ? round50(Math.max(floor!, facts.eer - deficit[0])) : round50(facts.eer - 100)
+  const caloriesMax = deficit ? round50(Math.max(floor!, facts.eer - deficit[1])) : round50(facts.eer + 100)
+  const factors: [number, number] = input.config.highProtein
+    ? input.config.baseStrategy === 'MAINTENANCE' ? [1.2, 1.6] : [1.4, 1.6]
+    : input.config.baseStrategy === 'MAINTENANCE' ? [0.8, 1.2] : [1.2, 1.6]
+  const dayType: NutritionDayType = flexible ? 'FLEXIBLE'
+    : input.config.baseStrategy === 'MAINTENANCE' ? 'MAINTENANCE' : 'NORMAL'
+  return { caloriesMin, caloriesMax, proteinMinG: Math.round(facts.reference * factors[0]),
+    proteinMaxG: Math.round(facts.reference * factors[1]), dayType,
+    calculationVersion: NUTRITION_PLAN_CALCULATION_VERSION,
+    rationale: { localDate: input.localDate, age: facts.age, sex: input.sex, heightCm: input.heightCm,
+      weightKg: input.weight!.weightKg, bodyMeasurementId: input.weight!.id,
+      weightLocalDate: input.weight!.localDate, activityLevel: input.activityLevel,
+      proteinReferenceWeightKg: facts.reference, proteinReferenceSource: facts.referenceSource,
+      estimatedEerKcal: facts.eer, baseStrategy: input.config.baseStrategy,
+      effectiveStrategy, deficitKcal: deficit, calorieFloorKcal: floor,
+      highProtein: input.config.highProtein, proteinFactors: factors,
+      treEnabled: input.config.treEnabled, treStartLocalTime: input.config.treStartLocalTime,
+      treWindowMinutes: input.config.treWindowMinutes, flexibleWeekday: input.config.flexibleWeekday,
+      flexibleDay: flexible, nutritionPlanRunId: input.planRunId,
+      nutritionPlanConfigVersion: NUTRITION_PLAN_CONFIG_VERSION, dayType,
+      formulaVersion: NUTRITION_PLAN_CALCULATION_VERSION } }
+}
 
 export function calculateDailyTarget(input: TargetInput): CalculatedTarget | null {
   const { birthDate, sex, heightCm, activityLevel, goal, weight, targetWeightKg, localDate } = input

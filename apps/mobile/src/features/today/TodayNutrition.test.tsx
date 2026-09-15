@@ -18,6 +18,7 @@ describe('Today nutrition presentation', () => {
         remaining: { calorieState: 'OVER', caloriesRemainingMin: 0, caloriesRemainingMax: 0,
           proteinGapG: 49, caloriesPartial: true, proteinPartial: true },
         targetUnavailableReason: null,
+        planRun: { id: 'run', base_strategy: 'STABLE_FAT_LOSS', high_protein: 1, tre_enabled: 0 },
       })),
     } as unknown as NutritionService
 
@@ -29,6 +30,7 @@ describe('Today nutrition presentation', () => {
     expect(section).toHaveTextContent('蛋白质还差 49 g')
     expect(section).toHaveTextContent('今日已超过目标范围')
     expect(section).toHaveTextContent('1 餐热量未知 · 1 餐蛋白质未知')
+    expect(section).toHaveTextContent('稳定减脂 · 高蛋白')
     expect(screen.getByRole('link', { name: '去记录 →' })).toHaveAttribute('href', '/food')
   })
 })

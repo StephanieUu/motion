@@ -46,4 +46,16 @@ describe('M7 Food entry presentation', () => {
     expect(screen.getByRole('heading', { name: '参考详情' })).toBeVisible()
     expect(screen.queryByLabelText('身高')).not.toBeInTheDocument()
   })
+
+  it('shows the current plan as a restrained route without changing the food hero', async () => {
+    const current = { daily: vi.fn(async () => ({ localDate: '2026-09-15', meals: [],
+      target: { calories_min: 1400, calories_max: 1650, protein_min_g: 80, day_type: 'FLEXIBLE' },
+      summary: { caloriesKnown: 0, proteinKnown: 0, unknownCalories: 0, unknownProtein: 0, entryCount: 0 },
+      remaining: { calorieState: 'BELOW', proteinGapG: 80 },
+      planRun: { id: 'run', base_strategy: 'STABLE_FAT_LOSS', high_protein: 1, tre_enabled: 1,
+        tre_start_local_time: '09:00', tre_window_minutes: 600 } })), templates: vi.fn(async () => []) } as unknown as NutritionService
+    render(<MemoryRouter><FoodScreen suppliedService={current} /></MemoryRouter>)
+    expect(await screen.findByRole('button', { name: /今日 · 宽松日/ })).toBeVisible()
+    expect(screen.getByText('1,400–1,650 kcal')).toBeVisible()
+  })
 })

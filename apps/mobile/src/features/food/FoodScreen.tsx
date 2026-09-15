@@ -8,6 +8,7 @@ import interludeArt from '../../assets/motion-art/today-interlude.png'
 import type { FoodEntryRecord, MealTemplateRecord, MealWithEntries } from '../../db/repositories/NutritionRepository'
 import { openNutritionService, type NutritionService } from './nutritionService'
 import type { DailyNutrition } from './nutritionPresentation'
+import { compactPlanLabel } from './nutritionPlanPresentation'
 import './food.css'
 
 const mealTypes: { type: MealType; label: string }[] = [
@@ -168,6 +169,8 @@ export function FoodScreen({ suppliedService }: { suppliedService?: NutritionSer
         <span>{day?.targetUnavailableReason === 'UNDER_19' ? '暂无成人自动目标' : '尚未设置营养目标'}</span></>}</div>
       {unquantifiedMeals > 0 ? <div className="food-status__note"><p>{unquantifiedMeals} 餐营养未知</p></div> : null}
     </section>
+    {day?.planRun ? <button className="food-plan-state" type="button" onClick={() => navigate('/food/plan')}>
+      <span>{compactPlanLabel(day.planRun, day.target?.day_type)}</span><AppIcon name="arrow" /></button> : null}
     <button className="food-log-action" type="button" aria-label="记一餐" onClick={() => setQuickOpen(true)}>
       <span aria-hidden="true">＋</span><strong>记一餐</strong><AppIcon name="arrow" /></button>
     {!quickOpen && error ? <p className="food-error" role="alert">{error}</p> : null}

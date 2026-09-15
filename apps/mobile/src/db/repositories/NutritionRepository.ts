@@ -1,4 +1,5 @@
-import type { ActivityLevel, CalculatedTarget, ConfidenceLevel, EstimationMethod, MealType } from '@motion/domain'
+import type { ActivityLevel, CalculatedPlanTarget, CalculatedTarget, ConfidenceLevel, EstimationMethod,
+  MealType, NutritionBaseStrategy, NutritionDayType, NutritionPlanConfig, NutritionPlanStatus } from '@motion/domain'
 import type { Database, SqlAccess, SqlRow } from '../sqlite/Database'
 
 export interface NutritionProfile extends SqlRow {
@@ -23,7 +24,14 @@ export type FoodEntryInput = Pick<FoodEntryRecord, 'name' | 'quantity' | 'unit' 
 export interface DailyNutritionTargetRecord extends SqlRow {
   id: string; local_date: string; calories_min: number; calories_max: number
   protein_min_g: number; protein_max_g: number; carbs_target_g: number | null; fat_target_g: number | null
-  day_type: 'NORMAL'; calculation_version: string; rationale_json: string; created_at: string
+  nutrition_plan_run_id: string | null; day_type: NutritionDayType | 'TRAINING' | 'REST' | 'LOW_INTAKE'
+  calculation_version: string; rationale_json: string; created_at: string
+}
+export interface NutritionPlanRunRecord extends SqlRow {
+  id: string; base_strategy: NutritionBaseStrategy; status: NutritionPlanStatus; starts_on: string
+  ends_on: string | null; high_protein: number; tre_enabled: number; tre_start_local_time: string | null
+  tre_window_minutes: number | null; flexible_weekday: number | null; config_version: number
+  ended_reason: string | null; created_at: string; updated_at: string
 }
 export interface MealTemplateSnapshot {
   schemaVersion: 1; mealType: MealType; note: string | null; entries: FoodEntryInput[]
@@ -74,12 +82,14 @@ export class NutritionRepository {
     return (await tx.query<DailyNutritionTargetRecord>(
       'SELECT * FROM daily_nutrition_targets WHERE local_date=?', [localDate]))[0] ?? null
   }
-  async insertTarget(localDate: string, target: CalculatedTarget, tx: SqlAccess): Promise<void> {
+  async insertTarget(localDate: string, target: CalculatedTarget | CalculatedPlanTarget, tx: SqlAccess,
+    nutritionPlanRunId: string | null = null): Promise<void> {
     await tx.run(`INSERT OR IGNORE INTO daily_nutrition_targets
       (id,local_date,calories_min,calories_max,protein_min_g,protein_max_g,carbs_target_g,fat_target_g,
-      day_type,calculation_version,rationale_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      nutrition_plan_run_id,day_type,calculation_version,rationale_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [crypto.randomUUID(), localDate, target.caloriesMin, target.caloriesMax, target.proteinMinG, target.proteinMaxG,
-      null, null, target.dayType, target.calculationVersion, JSON.stringify(target.rationale), new Date().toISOString()])
+      null, null, nutritionPlanRunId, target.dayType, target.calculationVersion,
+      JSON.stringify(target.rationale), new Date().toISOString()])
   }
   async replaceTodayTarget(localDate: string, target: CalculatedTarget, tx: SqlAccess): Promise<void> {
     await tx.run('DELETE FROM daily_nutrition_targets WHERE local_date=?', [localDate])
@@ -87,6 +97,68 @@ export class NutritionRepository {
   }
   async clearTodayTarget(localDate: string, tx: SqlAccess): Promise<void> {
     await tx.run('DELETE FROM daily_nutrition_targets WHERE local_date=?', [localDate])
+  }
+  async mealCountOn(localDate: string, tx: SqlAccess = this.db): Promise<number> {
+    return (await tx.query<{ count: number }>('SELECT COUNT(*) AS count FROM meals WHERE local_date=?',
+      [localDate]))[0]?.count ?? 0
+  }
+  async currentPlanRuns(tx: SqlAccess = this.db): Promise<{ active: NutritionPlanRunRecord | null;
+    scheduled: NutritionPlanRunRecord | null }> {
+    const rows = await tx.query<NutritionPlanRunRecord>(`SELECT * FROM nutrition_plan_runs
+      WHERE status IN ('ACTIVE','SCHEDULED') ORDER BY starts_on,id`)
+    return { active: rows.find((row) => row.status === 'ACTIVE') ?? null,
+      scheduled: rows.find((row) => row.status === 'SCHEDULED') ?? null }
+  }
+  async planHistory(tx: SqlAccess = this.db): Promise<NutritionPlanRunRecord[]> {
+    return tx.query<NutritionPlanRunRecord>(`SELECT * FROM nutrition_plan_runs
+      ORDER BY starts_on DESC,created_at DESC`)
+  }
+  async applicablePlanRun(localDate: string, tx: SqlAccess = this.db): Promise<NutritionPlanRunRecord | null> {
+    return (await tx.query<NutritionPlanRunRecord>(`SELECT * FROM nutrition_plan_runs
+      WHERE starts_on<=? AND (ends_on IS NULL OR ends_on>=?) AND status IN ('ACTIVE','ENDED','SCHEDULED')
+      ORDER BY starts_on DESC,CASE status WHEN 'ACTIVE' THEN 0 WHEN 'SCHEDULED' THEN 1 ELSE 2 END LIMIT 1`,
+    [localDate, localDate]))[0] ?? null
+  }
+  async activateDuePlan(localDate: string, tx: SqlAccess): Promise<void> {
+    const scheduled = (await tx.query<NutritionPlanRunRecord>(`SELECT * FROM nutrition_plan_runs
+      WHERE status='SCHEDULED' AND starts_on<=? ORDER BY starts_on LIMIT 1`, [localDate]))[0]
+    if (!scheduled) return
+    const active = (await tx.query<NutritionPlanRunRecord>(
+      "SELECT * FROM nutrition_plan_runs WHERE status='ACTIVE' LIMIT 1"))[0]
+    const now = new Date().toISOString()
+    if (active) {
+      const previous = new Date(`${scheduled.starts_on}T00:00:00Z`)
+      previous.setUTCDate(previous.getUTCDate() - 1)
+      const end = previous.toISOString().slice(0, 10)
+      if (end < active.starts_on) throw new Error('NUTRITION_PLAN_RUN_DATE_OVERLAP')
+      await tx.run(`UPDATE nutrition_plan_runs SET status='ENDED',ends_on=?,ended_reason='REPLACED',updated_at=?
+        WHERE id=?`, [end, now, active.id])
+    }
+    await tx.run("UPDATE nutrition_plan_runs SET status='ACTIVE',updated_at=? WHERE id=?", [now, scheduled.id])
+  }
+  async createPlanRun(config: NutritionPlanConfig, startsOn: string, today: string, tx: SqlAccess): Promise<string> {
+    const now = new Date().toISOString()
+    await tx.run(`UPDATE nutrition_plan_runs SET status='ENDED',ends_on=starts_on,
+      ended_reason='REPLACED_BEFORE_START',updated_at=? WHERE status='SCHEDULED'`, [now])
+    if (startsOn <= today) {
+      const active = (await tx.query<NutritionPlanRunRecord>(
+        "SELECT * FROM nutrition_plan_runs WHERE status='ACTIVE' LIMIT 1"))[0]
+      if (active) {
+        const previous = new Date(`${startsOn}T00:00:00Z`)
+        previous.setUTCDate(previous.getUTCDate() - 1)
+        const endsOn = previous.toISOString().slice(0, 10)
+        if (endsOn < active.starts_on) throw new Error('SAME_DAY_PLAN_REPLACEMENT_REQUIRES_SCHEDULING')
+        await tx.run(`UPDATE nutrition_plan_runs SET status='ENDED',ends_on=?,
+          ended_reason='REPLACED',updated_at=? WHERE id=?`, [endsOn, now, active.id])
+      }
+    }
+    const id = crypto.randomUUID(), status: NutritionPlanStatus = startsOn <= today ? 'ACTIVE' : 'SCHEDULED'
+    await tx.run(`INSERT INTO nutrition_plan_runs (id,base_strategy,status,starts_on,ends_on,high_protein,
+      tre_enabled,tre_start_local_time,tre_window_minutes,flexible_weekday,config_version,ended_reason,created_at,updated_at)
+      VALUES (?,?,?,?,NULL,?,?,?,?,?,?,NULL,?,?)`, [id, config.baseStrategy, status, startsOn,
+      Number(config.highProtein), Number(config.treEnabled), config.treStartLocalTime,
+      config.treWindowMinutes, config.flexibleWeekday, 1, now, now])
+    return id
   }
   async mealsOn(localDate: string, tx: SqlAccess = this.db): Promise<MealWithEntries[]> {
     const meals = await tx.query<MealRecord>('SELECT * FROM meals WHERE local_date=? ORDER BY logged_at,id', [localDate])
