@@ -561,6 +561,10 @@ h2 {
   color: var(--color-ink);
 }
 
+.bottom-nav__item.is-active:focus-visible {
+  outline: 0;
+}
+
 .bottom-nav__item.is-active::before {
   background: var(--color-coral);
 }

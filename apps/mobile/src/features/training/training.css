@@ -511,46 +511,67 @@
   }
 }
 
-/* Catalogue composition: lines and annotations replace the repeated card stack. */
-.training-library { gap: var(--space-4); }
-.training-library__header { min-height: 11.8rem; margin-inline: calc(-1 * var(--space-5)); padding: var(--space-6) var(--space-5) var(--space-5); border-bottom: 1px solid var(--color-gold-art); }
-.training-library__header-art { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.training-library__header-art img { position: absolute; display: block; max-width: none; }
-.training-library__header-art img:first-child { top: -4.6rem; right: -1.5rem; width: 13rem; height: 17rem; opacity: .7; transform: rotate(14deg); }
-.training-library__header-art img:last-child { top: .2rem; right: 2.5rem; width: 7rem; height: 5rem; opacity: .66; }
-.training-library__heading-row { margin-top: var(--space-6); align-items: end; }
-.training-library__heading-row h1 { max-width: 70%; font-size: clamp(2.35rem, 9vw, 3rem); }
-.training-library__add { min-height: 2.8rem; border-radius: .35rem; }
-.training-library__plan-link { margin-top: -.3rem; padding: var(--space-4) var(--space-1); border: 0; border-bottom: 1px solid var(--color-gold-soft); border-radius: 0; background: transparent; }
-.training-library__quick-start { display: grid; gap: var(--space-2); padding: var(--space-3) 0 var(--space-4); border-bottom: 1px solid var(--color-gold-soft); }
-.training-library__quick-start .eyebrow { color: var(--color-gold); }
+/* Training chapter composition. Behaviour remains in TrainingScreen. */
+.training-library { gap: 1rem; }
+.training-library__header { min-height: 0; margin-inline: calc(-1 * var(--space-5)); padding: .45rem var(--space-5) .25rem; overflow: visible; border-bottom: 0; background: radial-gradient(circle at 82% 26%, rgb(218 196 147 / 22%), transparent 36%); isolation: isolate; }
+.training-library__header::after { position: absolute; z-index: -1; right: 3.5rem; top: .8rem; width: 7.5rem; height: 7.5rem; border: 1px solid rgb(169 141 86 / 37%); border-radius: 50%; content: ''; }
+.training-library__header-art { position: absolute; z-index: -1; inset: -.5rem 0 auto; height: 7.5rem; overflow: hidden; pointer-events: none; }
+.training-library__header-art img { position: absolute; top: -5.5rem; right: -4.7rem; display: block; width: 19rem; max-width: none; opacity: .67; }
+.training-library__heading-row { position: relative; z-index: 1; top: auto; right: auto; left: auto; align-items: center; margin-top: 0; }
+.training-library__heading-row h1 { max-width: 55%; color: var(--color-green-deep); font-size: clamp(2.8rem, 13vw, 3.8rem); font-weight: 650; line-height: .98; }
+.training-library__add { min-height: 3.15rem; padding-inline: 1rem; border-radius: .65rem; box-shadow: 0 .35rem 1rem rgb(31 72 51 / 12%); font-size: .82rem; }
+.training-library__add::before { margin-right: .35rem; content: '＋'; font-size: 1.2rem; font-weight: 400; vertical-align: -.08rem; }
+
+.training-library__quick-start { position: relative; display: grid; min-height: 7.4rem; align-content: center; gap: .7rem; overflow: hidden; padding: 1.1rem 1.15rem; border: 1px solid rgb(169 141 86 / 28%); border-radius: 1.25rem; background: linear-gradient(110deg, rgb(255 252 245 / 88%), rgb(247 243 233 / 60%)); isolation: isolate; }
+.training-library__quick-start::after { position: absolute; z-index: -1; right: 4.1rem; bottom: -2.8rem; width: 7.5rem; height: 7.5rem; background: url('../../assets/motion-art/motion-orbit.svg') center / contain no-repeat; content: ''; opacity: .15; }
+.training-library__quick-start .eyebrow { color: #846b43; font-size: .7rem; letter-spacing: .04em; }
 .training-library__quick-start-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
-.training-library__quick-start-row div { display: grid; gap: .2rem; }
-.training-library__quick-start-row strong { font-family: var(--font-display); font-size: 1.2rem; }
-.training-library__quick-start-row span { color: var(--color-ink-soft); font-size: .8rem; }
-.training-library__quick-start-row button { min-height: 2.6rem; padding: .45rem 1rem; border: 1px solid var(--color-green-deep); border-radius: 2rem; background: var(--color-green-deep); color: var(--color-surface); font: inherit; font-weight: 700; }
-.training-library__quick-start-row button:disabled { opacity: .55; }
-.training-library__views, .training-library__mode-switch { gap: var(--space-3); border-bottom-color: var(--color-gold-soft); }
-.training-library__views button, .training-library__mode-switch button { font-size: .82rem; }
-.training-library__search input, .training-library__form input { border-color: var(--color-line); border-radius: .35rem; background: var(--color-surface); }
-.training-library__filter-toggle, .training-library__clear { border-radius: .35rem; background: transparent; }
-.training-library__filters { gap: var(--space-4); padding: var(--space-4) 0; border: 0; border-top: 1px solid var(--color-gold-soft); border-bottom: 1px solid var(--color-gold-soft); border-radius: 0; background: transparent; }
-.training-library__count { padding-top: var(--space-1); color: var(--color-gold); font-size: .76rem; }
-.training-library__list { gap: 0; border-top: 1px solid var(--color-gold-soft); }
-.training-library__card { min-height: 8.35rem; gap: .35rem; padding: var(--space-5) var(--space-5) var(--space-5) 3rem; border: 0; border-bottom: 1px solid var(--color-gold-soft); border-radius: 0; background: transparent; }
-.training-library__card:nth-child(3n + 1) { background: url('../../assets/motion-art/motion-stars.svg') calc(100% - .8rem) .3rem / 4.4rem auto no-repeat; }
-.training-library__card:nth-child(3n + 2) { padding-left: 3.4rem; background-color: rgb(255 252 245 / 52%); }
-.training-library__card:nth-child(3n + 2)::before { left: .4rem; }
-.training-library__card::before { top: var(--space-5); left: var(--space-1); color: var(--color-gold); font-size: 1.05rem; }
-.training-library__card::after { right: var(--space-2); bottom: var(--space-5); border-color: var(--color-green-deep); }
+.training-library__quick-start-row div { display: grid; gap: .28rem; }
+.training-library__quick-start-row strong { color: var(--color-green-deep); font-family: var(--font-display); font-size: clamp(1.55rem, 7vw, 1.9rem); font-weight: 650; line-height: 1; }
+.training-library__quick-start-row span { color: var(--color-ink-soft); font-size: .78rem; }
+.training-library__quick-start-row button { min-height: 2.8rem; padding: .45rem 1rem; border: 1px solid var(--color-green-deep); border-radius: 2rem; background: var(--color-green-deep); color: var(--color-surface); font: inherit; font-weight: 700; white-space: nowrap; }
+.training-library__quick-start-row button::after { margin-left: .45rem; content: '→'; font-size: 1rem; font-weight: 400; }
+
+.training-library__catalogue { position: relative; display: grid; gap: .8rem; overflow: hidden; padding: 1.15rem 1rem 0; border: 1px solid rgb(169 141 86 / 27%); border-radius: 1.25rem; background: rgb(255 252 245 / 55%); isolation: isolate; }
+.training-library__catalogue::after { position: absolute; z-index: -1; right: -4.5rem; bottom: -5rem; width: 12rem; height: 12rem; background: url('../../assets/motion-art/motion-leaves.svg') right bottom / contain no-repeat; content: ''; opacity: .1; pointer-events: none; }
+.training-library__catalogue-heading { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.training-library__catalogue-heading h2 { color: var(--color-green-deep); font-size: 1.35rem; font-weight: 650; }
+.training-library__plan-link { display: inline-flex; align-items: center; gap: .3rem; padding: .35rem 0; border: 0; border-radius: 0; background: transparent; color: var(--color-green-deep); font-size: .76rem; font-weight: 650; text-decoration: none; }
+.training-library__plan-link::after { display: none; }
+
+.training-library__views, .training-library__mode-switch { gap: .5rem; border-bottom-color: var(--color-gold-soft); }
+.training-library__views button, .training-library__mode-switch button { min-width: 0; min-height: 2.7rem; flex: 1 1 0; font-size: .78rem; white-space: nowrap; }
+.training-library__views button[aria-pressed='true'], .training-library__mode-switch button[aria-pressed='true'] { border-color: var(--color-coral); color: var(--color-green-deep); }
+.training-library__search-row { gap: .55rem; }
+.training-library__search { position: relative; min-width: 0; }
+.training-library__search::before { position: absolute; z-index: 1; top: 50%; left: .85rem; width: .8rem; height: .8rem; border: 1.5px solid var(--color-ink-soft); border-radius: 50%; content: ''; transform: translateY(-62%); pointer-events: none; }
+.training-library__search::after { position: absolute; z-index: 1; top: 57%; left: 1.55rem; width: .42rem; height: 1px; background: var(--color-ink-soft); content: ''; transform: rotate(45deg); pointer-events: none; }
+.training-library__search input, .training-library__form input { min-height: 3rem; border-color: var(--color-gold-soft); border-radius: .6rem; background: rgb(255 252 245 / 80%); }
+.training-library__search input { padding-left: 2.35rem; font-size: .82rem; }
+.training-library__filter-toggle, .training-library__clear { border-color: var(--color-gold-soft); border-radius: .6rem; background: rgb(255 252 245 / 64%); }
+.training-library__filter-toggle::before { margin-right: .35rem; content: '☷'; color: var(--color-green-deep); }
+.training-library__filters { gap: var(--space-4); padding: var(--space-4) 0; border: 0; border-block: 1px solid var(--color-gold-soft); border-radius: 0; background: transparent; }
+.training-library__count { padding-top: .15rem; color: #876f48; font-size: .7rem; }
+
+.training-library__list { gap: 0; margin-inline: -1rem; border-top: 1px solid var(--color-gold-soft); }
+.training-library__card { min-height: 7.6rem; gap: .3rem; padding: 1.15rem 2.5rem 1.15rem 3rem; border: 0; border-bottom: 1px solid var(--color-gold-soft); border-radius: 0; background: rgb(255 252 245 / 30%); }
+.training-library__card:nth-child(even) { background-color: rgb(241 237 225 / 35%); }
+.training-library__card::before { top: 1.2rem; left: 1rem; color: var(--color-coral); font-size: .95rem; }
+.training-library__card::after { right: 1.15rem; bottom: 1.35rem; border-color: var(--color-green-deep); }
 .training-library__card:active { background-color: var(--color-green-soft); }
-.training-library__card-source { color: var(--color-gold); font-size: .69rem; letter-spacing: .08em; }
-.training-library__card strong { max-width: 94%; font-size: clamp(1.18rem, 5vw, 1.45rem); font-weight: 650; }
-.training-library__card-meta { font-size: .74rem; }
-.training-library__card-reaction { top: auto; right: var(--space-5); bottom: var(--space-5); }
-.training-library__pending-chip { font-size: .72rem; }
-.training-library__empty { min-height: 14rem; border: 0; border-bottom: 1px solid var(--color-gold-soft); border-radius: 0; background: transparent; }
-.training-library__empty-art { width: 5.5rem; height: 5.5rem; border: 0; border-radius: 0; background: url('../../assets/motion-art/motion-crescent.svg') center / contain no-repeat; box-shadow: none; }
+.training-library__card-source { color: #876f48; font-size: .66rem; letter-spacing: .07em; }
+.training-library__card strong { max-width: 100%; color: var(--color-green-deep); font-size: clamp(1.15rem, 5vw, 1.4rem); font-weight: 650; }
+.training-library__card-meta { font-size: .72rem; }
+.training-library__card-reaction { top: auto; right: 1.2rem; bottom: 1.2rem; }
+.training-library__pending-chip { font-size: .7rem; }
+
+.training-library__empty { position: relative; min-height: 19rem; margin: 0 -1rem; overflow: hidden; padding-bottom: 2.25rem; border: 0; border-top: 1px solid var(--color-gold-soft); border-radius: 0; background: transparent; isolation: isolate; }
+.training-library__empty::before { position: absolute; z-index: -1; bottom: -4rem; left: -4.3rem; width: 13rem; height: 13rem; background: url('../../assets/motion-art/motion-leaves.svg') left bottom / contain no-repeat; content: ''; opacity: .18; transform: scaleX(-1); }
+.training-library__empty::after { position: absolute; z-index: -1; top: 2.2rem; right: 1.2rem; width: 5rem; height: 4rem; background: url('../../assets/motion-art/motion-stars.svg') center / contain no-repeat; content: ''; opacity: .32; }
+.training-library__empty-art { width: 4.7rem; height: 4.7rem; border: 0; border-radius: 0; background: url('../../assets/motion-art/motion-crescent.svg') center / contain no-repeat; box-shadow: none; }
+.training-library__empty p { color: var(--color-green-deep); font-family: var(--font-display); font-size: 1.35rem; font-weight: 650; }
+.training-library__empty button { border-color: var(--color-gold-soft); border-radius: 2rem; background: rgb(255 252 245 / 86%); box-shadow: 0 .3rem 1rem rgb(31 72 51 / 8%); color: var(--color-green-deep); }
+
 .training-library__back-nav { background: rgb(247 243 233 / 97%); }
 .training-library__back { border-color: var(--color-gold-soft); background: var(--color-surface); }
 .training-library__subheader { min-height: 11rem; padding: var(--space-5) var(--space-1) var(--space-6); border-bottom-color: var(--color-gold-art); background: url('../../assets/motion-art/motion-lily.svg') calc(100% + 2.4rem) -1.6rem / 10rem auto no-repeat; }
@@ -566,6 +587,19 @@
 .training-library__tags span { padding: var(--space-2) 0; border: 0; border-bottom: 1px solid var(--color-gold-soft); border-radius: 0; background: transparent; }
 .training-library__source-link { padding: var(--space-4) 0; border-top: 1px solid var(--color-gold-soft); }
 .training-library__actions { padding-top: var(--space-4); border-top: 1px solid var(--color-gold-soft); }
-.training-library__actions button, .training-library__confirm button, .training-library__today-selected { border-radius: .35rem; }
-.training-library__confirm { border-radius: .35rem; }
-@media (max-width: 23rem) { .training-library__header { padding-inline: var(--space-4); } .training-library__header-art img:first-child { right: -3rem; } }
+.training-library__actions button, .training-library__confirm button, .training-library__today-selected { border-radius: .45rem; }
+.training-library__confirm { border-radius: .45rem; }
+
+.mobile-shell:has(.training-library) .coach-entry { right: max(var(--space-4), calc((100vw - 32rem) / 2 + var(--space-4))); bottom: calc(var(--motion-safe-bottom) + 5.7rem); background: rgb(255 252 245 / 90%); }
+
+@media (max-width: 23rem) {
+  .training-library__header { min-height: 0; padding-inline: var(--space-4); }
+  .training-library__heading-row { right: auto; left: auto; }
+  .training-library__header-art img { right: -6rem; width: 18rem; }
+  .training-library__heading-row h1 { font-size: 2.65rem; }
+  .training-library__add { padding-inline: .75rem; }
+  .training-library__catalogue { padding-inline: .75rem; }
+  .training-library__list, .training-library__empty { margin-inline: -.75rem; }
+  .training-library__views button { font-size: .72rem; }
+  .training-library__filters { grid-template-columns: 1fr; }
+}

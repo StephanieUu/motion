@@ -5,8 +5,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import type { SourceType, WorkoutPreference, WorkoutVisibility } from '@motion/domain'
 import { logger } from '../../app/logger'
 import { ChoiceSelect } from '../../components/ChoiceSelect'
-import leavesArt from '../../assets/motion-art/motion-leaves.svg'
-import starsArt from '../../assets/motion-art/motion-stars.svg'
+import trainingArt from '../../assets/motion-art/today-artwork.png'
 import type { LibraryWorkout } from '../../db/repositories/WorkoutRepository'
 import type { WorkoutImportResult } from '../../db/repositories/WorkoutImportRepository'
 import { uiCopy } from '../../locales'
@@ -299,9 +298,8 @@ export function TrainingScreen({ library: suppliedLibrary, execution: suppliedEx
         <>
           <header className="training-library__header">
             <div className="training-library__header-art" aria-hidden="true">
-              <img src={leavesArt} alt="" /><img src={starsArt} alt="" />
+              <img src={trainingArt} alt="" />
             </div>
-            <span className="eyebrow">{uiCopy.training.eyebrow}</span>
             <div className="training-library__heading-row">
               <h1>{uiCopy.training.title}</h1>
               <button type="button" className="training-library__add" onClick={() => enterSubview('ADD_URL')}>
@@ -319,31 +317,36 @@ export function TrainingScreen({ library: suppliedLibrary, execution: suppliedEx
             </div>
           </section>
 
-          <Link className="training-library__plan-link" to="/training/plan" state={{ from: '/training' }}>
-            {uiCopy.plan.title}</Link>
+          <section className="training-library__catalogue" aria-labelledby="training-catalogue-title">
+            <div className="training-library__catalogue-heading">
+              <h2 id="training-catalogue-title">{uiCopy.plan.title}</h2>
+              <Link className="training-library__plan-link" to="/training/plan" state={{ from: '/training' }}
+                aria-label={uiCopy.plan.title}>
+                查看全部 <span aria-hidden="true">→</span></Link>
+            </div>
 
-          <div className="training-library__views" role="group" aria-label={uiCopy.training.title}>
-            {(['ACTIVE', 'TEMPORARILY_HIDDEN', 'ARCHIVED'] as WorkoutVisibility[]).map((visibility) => (
-              <button type="button" key={visibility} aria-pressed={filters.visibility === visibility}
-                onClick={() => setFilters({ ...defaultLibraryFilters, visibility })}>
-                {visibility === 'ACTIVE' ? uiCopy.training.allWorkouts
-                  : visibility === 'TEMPORARILY_HIDDEN' ? uiCopy.training.hiddenWorkouts : uiCopy.training.archivedWorkouts}
-              </button>
-            ))}
-          </div>
+            <div className="training-library__views" role="group" aria-label={uiCopy.training.title}>
+              {(['ACTIVE', 'TEMPORARILY_HIDDEN', 'ARCHIVED'] as WorkoutVisibility[]).map((visibility) => (
+                <button type="button" key={visibility} aria-pressed={filters.visibility === visibility}
+                  onClick={() => setFilters({ ...defaultLibraryFilters, visibility })}>
+                  {visibility === 'ACTIVE' ? uiCopy.training.allWorkouts
+                    : visibility === 'TEMPORARILY_HIDDEN' ? uiCopy.training.hiddenWorkouts : uiCopy.training.archivedWorkouts}
+                </button>
+              ))}
+            </div>
 
-          <div className="training-library__search-row">
-            <label className="training-library__search">
-              <span className="sr-only">{uiCopy.training.search}</span>
-              <input type="search" value={filters.search} placeholder={uiCopy.training.searchPlaceholder}
-                onChange={(event) => setFilter('search', event.target.value)} />
-            </label>
-            <button type="button" className="training-library__filter-toggle" aria-expanded={showFilters}
-              onClick={() => setShowFilters(!showFilters)}>{uiCopy.training.filters}</button>
-          </div>
+            <div className="training-library__search-row">
+              <label className="training-library__search">
+                <span className="sr-only">{uiCopy.training.search}</span>
+                <input type="search" value={filters.search} placeholder={uiCopy.training.searchPlaceholder}
+                  onChange={(event) => setFilter('search', event.target.value)} />
+              </label>
+              <button type="button" className="training-library__filter-toggle" aria-expanded={showFilters}
+                onClick={() => setShowFilters(!showFilters)}>{uiCopy.training.filters}</button>
+            </div>
 
-          {showFilters ? (
-            <div className="training-library__filters">
+            {showFilters ? (
+              <div className="training-library__filters">
               <ChoiceSelect label={uiCopy.training.activityType} value={filters.activityTypeId}
                 onChange={(value) => setFilter('activityTypeId', value)} options={[
                   { value: 'ALL', label: uiCopy.training.all },
@@ -369,39 +372,41 @@ export function TrainingScreen({ library: suppliedLibrary, execution: suppliedEx
                   label: uiCopy.training.historyOptions[history] }))} />
               <button type="button" className="training-library__clear" onClick={() =>
                 setFilters({ ...defaultLibraryFilters, visibility: filters.visibility })}>{uiCopy.training.clearFilters}</button>
-            </div>
-          ) : null}
+              </div>
+            ) : null}
 
-          {notice ? <p className="training-library__notice" role="status">{notice}</p> : null}
-          {error ? <p className="training-library__error" role="alert">{error}</p> : null}
-          <div className="training-library__count">{visible.length} {uiCopy.training.countUnit}</div>
-          {visible.length ? <div className="training-library__list">
-            {visible.map((workout) => <button type="button" className="training-library__card" key={workout.id}
-              onClick={() => showDetail(workout)}>
-              <span className="training-library__card-source">{uiCopy.training.sources[workout.sourceType]}</span>
-              {snapshot.pendingTodayWorkoutId === workout.id ?
-                <span className="training-library__pending-chip">{uiCopy.training.import.todaySelected}</span> : null}
-              <strong>{displayWorkoutTitle(workout)}</strong>
-              <span className="training-library__card-meta">
-                {workout.activityTypeName ?? uiCopy.training.unclassified}<span aria-hidden="true"> · </span>
-                {workout.durationMinutes === null ? uiCopy.training.durationOptions.UNKNOWN
-                  : formatDisplayMinutes(workout.durationMinutes)}
-              </span>
-              {workout.userPreference ? <span className="training-library__card-reaction"
-                aria-label={uiCopy.training.reactionLabels[workout.userPreference]}>
-                {uiCopy.training.reactions[workout.userPreference]}</span> : null}
-            </button>)}
-          </div> : (
-            <div className="training-library__empty">
-              <span className="training-library__empty-art" aria-hidden="true" />
-              <p>{filters.visibility === 'TEMPORARILY_HIDDEN' ? uiCopy.training.emptyHidden
-                : filters.visibility === 'ARCHIVED' ? uiCopy.training.emptyArchived
-                  : snapshot.workouts.some((item) => item.userVisibility === 'ACTIVE')
-                    ? uiCopy.training.noResults : uiCopy.training.empty}</p>
-              {filters.visibility === 'ACTIVE' && snapshot.workouts.length === 0 ?
-                <button type="button" onClick={() => enterSubview('ADD_URL')}>{uiCopy.training.addUrl}</button> : null}
-            </div>
-          )}
+            {notice ? <p className="training-library__notice" role="status">{notice}</p> : null}
+            {error ? <p className="training-library__error" role="alert">{error}</p> : null}
+            <div className="training-library__count">{visible.length} {uiCopy.training.countUnit}</div>
+            {visible.length ? <div className="training-library__list">
+              {visible.map((workout) => <button type="button" className="training-library__card" key={workout.id}
+                onClick={() => showDetail(workout)}>
+                <span className="training-library__card-source">{uiCopy.training.sources[workout.sourceType]}</span>
+                {snapshot.pendingTodayWorkoutId === workout.id ?
+                  <span className="training-library__pending-chip">{uiCopy.training.import.todaySelected}</span> : null}
+                <strong>{displayWorkoutTitle(workout)}</strong>
+                <span className="training-library__card-meta">
+                  {workout.activityTypeName ?? uiCopy.training.unclassified}<span aria-hidden="true"> · </span>
+                  {workout.durationMinutes === null ? uiCopy.training.durationOptions.UNKNOWN
+                    : formatDisplayMinutes(workout.durationMinutes)}
+                </span>
+                {workout.userPreference ? <span className="training-library__card-reaction"
+                  aria-label={uiCopy.training.reactionLabels[workout.userPreference]}>
+                  {uiCopy.training.reactions[workout.userPreference]}</span> : null}
+              </button>)}
+            </div> : (
+              <div className="training-library__empty">
+                <span className="training-library__empty-art" aria-hidden="true" />
+                <p>{filters.visibility === 'TEMPORARILY_HIDDEN' ? uiCopy.training.emptyHidden
+                  : filters.visibility === 'ARCHIVED' ? uiCopy.training.emptyArchived
+                    : snapshot.workouts.some((item) => item.userVisibility === 'ACTIVE')
+                      ? uiCopy.training.noResults : uiCopy.training.empty}</p>
+                {filters.visibility === 'ACTIVE' && snapshot.workouts.length === 0 ?
+                  <button type="button" aria-label="添加第一条训练" onClick={() => enterSubview('ADD_URL')}>
+                    <span aria-hidden="true">＋</span> {uiCopy.training.add}</button> : null}
+              </div>
+            )}
+          </section>
         </>
       ) : null}
 

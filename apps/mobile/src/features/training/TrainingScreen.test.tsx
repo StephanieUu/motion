@@ -82,6 +82,25 @@ function fakeLibrary(initial: LibraryWorkout[] = []) {
 }
 
 describe('M2 Training screen', () => {
+  it('groups the approved Training hierarchy without removing library controls', async () => {
+    render(<TrainingScreen library={fakeLibrary()} />)
+
+    expect(await screen.findByRole('heading', { name: uiCopy.training.title })).toBeVisible()
+    expect(screen.queryByText(uiCopy.training.eyebrow)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: uiCopy.training.add })).toBeVisible()
+    const catalogue = screen.getByRole('region', { name: uiCopy.plan.title })
+    const planLink = within(catalogue).getByRole('link', { name: uiCopy.plan.title })
+    expect(planLink).toHaveAttribute('href', '/training/plan')
+    expect(planLink).toHaveTextContent('查看全部')
+    expect(within(catalogue).getByRole('button', { name: uiCopy.training.allWorkouts })).toBeVisible()
+    expect(within(catalogue).getByRole('button', { name: uiCopy.training.hiddenWorkouts })).toBeVisible()
+    expect(within(catalogue).getByRole('button', { name: uiCopy.training.archivedWorkouts })).toBeVisible()
+    expect(within(catalogue).getByPlaceholderText(uiCopy.training.searchPlaceholder)).toBeVisible()
+    expect(within(catalogue).getByRole('button', { name: uiCopy.training.filters })).toBeVisible()
+    expect(within(catalogue).getByText(uiCopy.training.empty)).toBeVisible()
+    expect(within(catalogue).getByRole('button', { name: '添加第一条训练' })).toBeVisible()
+  })
+
   it('offers a voluntary Mini Routine and starts the existing execution flow on Today', async () => {
     const startMiniRoutine = vi.fn(async () => ({ id: 'mini-session' }))
     const startWorkout = vi.fn()
