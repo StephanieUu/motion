@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core'
-import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 
 import { AppShell } from '../components/AppShell'
 import { BodyScreen } from '../features/body/BodyScreen'
 import { FoodScreen } from '../features/food/FoodScreen'
+import { NutritionProfileScreen, NutritionReferenceScreen } from '../features/food/NutritionReferenceScreen'
+import { OnboardingFlow } from '../features/onboarding/OnboardingFlow'
+import { openOnboardingService, type OnboardingService } from '../features/onboarding/onboardingService'
 import { MeScreen } from '../features/me/MeScreen'
 import { TodayScreen } from '../features/today/TodayScreen'
 import { TrainingScreen } from '../features/training/TrainingScreen'
@@ -18,14 +21,29 @@ import { MotivationRepository } from '../db/repositories/MotivationRepository'
 import { getNativeDatabase } from '../db/sqlite/nativeDatabase'
 import { logger } from './logger'
 
-interface AppProps { trainingLibrary?: TrainingLibrary }
+interface AppProps { trainingLibrary?: TrainingLibrary; onboardingService?: OnboardingService }
 
-export function App({ trainingLibrary }: AppProps) {
+export function App({ trainingLibrary, onboardingService }: AppProps) {
   const navigate = useNavigate()
+  const location = useLocation()
   const navigateRef = useRef(navigate)
   const [importResult, setImportResult] = useState<WorkoutImportResult | null>(null)
+  const [onboarding, setOnboarding] = useState<'LOADING' | 'SHOW' | 'HIDE'>(() =>
+    onboardingService || Capacitor.isNativePlatform() ? 'LOADING' : 'HIDE')
+  const [activeOnboardingService, setActiveOnboardingService] = useState<OnboardingService | null>(onboardingService ?? null)
 
   useEffect(() => { navigateRef.current = navigate }, [navigate])
+
+  useEffect(() => {
+    if (!onboardingService && !Capacitor.isNativePlatform()) return
+    let active = true
+    void (async () => {
+      try { const current = onboardingService ?? await openOnboardingService(); if (!active) return
+        setActiveOnboardingService(current); setOnboarding(await current.status() === 'PENDING' ? 'SHOW' : 'HIDE') }
+      catch (cause) { logger.error('Onboarding state load failed', cause); if (active) setOnboarding('HIDE') }
+    })()
+    return () => { active = false }
+  }, [onboardingService])
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return
@@ -81,8 +99,16 @@ export function App({ trainingLibrary }: AppProps) {
     return () => { disposed = true; if (listener) void listener.remove() }
   }, [trainingLibrary])
 
-  return (
-    <AppShell>
+  if (onboarding === 'LOADING') return <main className="onboarding-loading" aria-label="正在打开 Motion" />
+  if (onboarding === 'SHOW' && activeOnboardingService) return <OnboardingFlow service={activeOnboardingService}
+    onExit={() => setOnboarding('HIDE')} />
+
+  if (location.pathname === '/food/reference' || location.pathname === '/food/profile') return <Routes>
+    <Route path="/food/reference" element={<NutritionReferenceScreen />} />
+    <Route path="/food/profile" element={<NutritionProfileScreen />} />
+  </Routes>
+
+  return <AppShell>
       <Routes>
         <Route path="/" element={<TodayScreen />} />
         <Route path="/training" element={<TrainingScreen library={trainingLibrary} importResult={importResult}
@@ -94,5 +120,4 @@ export function App({ trainingLibrary }: AppProps) {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AppShell>
-  )
 }

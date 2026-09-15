@@ -1,0 +1,27 @@
+.editorial-date { display: grid; color: var(--color-ink-soft); font-size: .7rem; }
+.editorial-date__control { position: relative; display: flex; min-height: 2.9rem; align-items: center; margin-top: .35rem; padding: .55rem .75rem; border: 1px solid var(--color-gold-soft); border-radius: .55rem; background: rgb(255 252 245 / 76%); text-align: left; }
+.editorial-date output { color: var(--color-green-deep); font-family: var(--font-display); font-size: .94rem; }
+.editorial-date i { margin-left: auto; color: var(--color-gold); font-style: normal; font-size: .72rem; }
+.editorial-date__picker { display: grid; grid-template-columns: 1.35fr 1fr 1fr; gap: .5rem; margin-top: .55rem; padding: .75rem; border-block: 1px solid rgb(169 141 86 / 25%); background: rgb(255 252 245 / 58%); }
+.editorial-date__picker label { display: grid; gap: .25rem; text-align: center; }
+.editorial-date__picker label > span { color: var(--color-gold); font-family: var(--font-display); font-size: .65rem; }
+.editorial-date__picker select { width: 100%; min-height: 2.7rem; padding: .35rem .25rem; border: 0; border-block: 1px solid var(--color-gold-soft); border-radius: 0; outline: 0; appearance: none; background: transparent; color: var(--color-green-deep); font-family: var(--font-display); font-size: 1.15rem; text-align: center; text-align-last: center; }
+.editorial-date__picker select:focus-visible { box-shadow: 0 0 0 2px rgb(169 141 86 / 24%); }
+.editorial-date__picker > p { grid-column: 1 / -1; color: var(--color-coral); font-size: .68rem; text-align: center; }
+.editorial-date__picker > button { grid-column: 1 / -1; justify-self: center; min-height: 1.8rem; padding-inline: 1.4rem; border: 0; background: transparent; color: var(--color-green-deep); font-size: .72rem; }
+.editorial-number { display: grid; justify-items: stretch; min-width: 0; color: var(--color-ink-soft); font-size: .7rem; }
+.editorial-number__label { justify-self: start; }
+.editorial-number__value { display: flex; align-items: baseline; justify-content: center; gap: .4rem; min-height: 3.5rem; padding-top: .25rem; }
+.editorial-number__value input { width: min(7ch, 68%); min-height: 0; padding: 0; border: 0; outline: 0; background: transparent; color: var(--color-green-deep); font-family: var(--font-display); font-size: clamp(2rem, 9vw, 2.65rem); line-height: 1.15; text-align: right; appearance: textfield; }
+.editorial-number__value input::-webkit-inner-spin-button { appearance: none; }
+.editorial-number__value input::placeholder { color: var(--color-gold-soft); opacity: 1; }
+.editorial-number__value small { color: var(--color-green-deep); font-family: var(--font-display); font-size: .75rem; }
+.editorial-number__ruler { position: relative; display: grid; width: min(100%, 17rem); justify-self: center; gap: .22rem; }
+.editorial-number__ruler > input { width: 100%; height: 1.45rem; margin: 0; padding: 0; border: 0; outline: 0; appearance: none; touch-action: none; cursor: ew-resize; background: repeating-linear-gradient(90deg, rgb(169 141 86 / 32%) 0 1px, transparent 1px 8.25%) center bottom / 100% 1rem no-repeat, linear-gradient(rgb(169 141 86 / 22%), rgb(169 141 86 / 22%)) center bottom / 100% 1px no-repeat; }
+.editorial-number__ruler > input::-webkit-slider-runnable-track { height: 1.45rem; background: transparent; }
+.editorial-number__ruler > input::-webkit-slider-thumb { width: 1.25rem; height: 1.45rem; border: 0; appearance: none; background: linear-gradient(90deg, transparent calc(50% - .5px), var(--color-green-deep) calc(50% - .5px) calc(50% + .5px), transparent calc(50% + .5px)); }
+.editorial-number__ruler > input::-moz-range-track { height: 1.45rem; border: 0; background: transparent; }
+.editorial-number__ruler > input::-moz-range-thumb { width: 1.25rem; height: 1.45rem; border: 0; border-radius: 0; background: linear-gradient(90deg, transparent calc(50% - .5px), var(--color-green-deep) calc(50% - .5px) calc(50% + .5px), transparent calc(50% + .5px)); }
+.editorial-number__ruler > input:focus-visible { border-radius: .25rem; box-shadow: 0 0 0 2px rgb(169 141 86 / 24%); }
+.editorial-number__ruler > span { display: flex; justify-content: space-between; color: var(--color-ink-soft); }
+.editorial-number__ruler small { font-size: .52rem; font-variant-numeric: tabular-nums; }

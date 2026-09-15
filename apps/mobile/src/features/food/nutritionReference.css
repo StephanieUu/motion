@@ -1,0 +1,36 @@
+.nutrition-page { position: relative; width: min(100%, 32rem); min-height: 100dvh; margin-inline: auto; overflow: hidden; padding: calc(var(--motion-safe-top) + 1.1rem) var(--space-5) calc(var(--motion-safe-bottom) + 6rem); background: var(--color-surface); color: var(--color-green-deep); isolation: isolate; }
+.nutrition-page::before { position: absolute; z-index: -2; inset: 0; background: url('../../assets/motion-art/motion-paper-texture.png') center / 34rem repeat; content: ''; opacity: .28; }
+.nutrition-page::after { position: absolute; z-index: -1; right: -4rem; bottom: -2rem; width: 18rem; height: 23rem; background: url('../../assets/motion-art/motion-leaves.svg') right bottom / contain no-repeat; content: ''; opacity: .46; }
+.nutrition-page__back { width: 2.5rem; height: 2.5rem; padding: 0; border: 0; background: transparent; color: var(--color-green-deep); font-size: 2rem; text-align: left; }
+.nutrition-page header { margin-top: 1.2rem; }
+.nutrition-page header h1 { color: var(--color-green-deep); font-size: clamp(2rem, 9vw, 2.75rem); line-height: 1.15; }
+.nutrition-page header p { margin-top: .4rem; color: var(--color-ink-soft); font-size: .75rem; }
+.nutrition-reference__card { position: relative; display: grid; justify-items: center; gap: .25rem; margin-top: 2rem; padding: 2.45rem 1rem 2.25rem; border: 1px solid var(--color-gold-soft); border-radius: 1.5rem; background: rgb(255 252 245 / 48%); text-align: center; isolation: isolate; }
+.nutrition-reference__card::before { position: absolute; z-index: -1; top: 38%; left: -1.15rem; width: 3.2rem; height: 3.2rem; border-radius: 50%; background: radial-gradient(circle, #e2bd72 0 24%, transparent 26%), repeating-conic-gradient(from 0deg, rgb(169 141 86 / 48%) 0 2deg, transparent 2deg 14deg); content: ''; opacity: .68; }
+.nutrition-reference__card::after { position: absolute; top: -1rem; right: -1rem; width: 4rem; height: 4rem; background: url('../../assets/motion-art/motion-stars.svg') center / contain no-repeat; content: ''; opacity: .58; }
+.nutrition-reference__card strong { font-family: var(--font-display); font-size: clamp(2.35rem, 10vw, 3.05rem); font-weight: 500; line-height: 1.08; }
+.nutrition-reference__card span { color: var(--color-ink-soft); font-size: .73rem; line-height: 1.5; }
+.nutrition-reference__card i { width: 72%; margin-block: .9rem; border-top: 1px solid var(--color-gold-soft); }
+.nutrition-reference__empty { margin-top: 2rem; padding: 2rem 1.4rem; border: 1px solid var(--color-gold-soft); border-radius: 1.5rem; text-align: center; }
+.nutrition-reference__empty strong { font-family: var(--font-display); font-size: 1.45rem; }
+.nutrition-reference__empty p { margin-top: .6rem; color: var(--color-ink-soft); font-size: .75rem; line-height: 1.6; }
+.nutrition-reference__basis { margin-top: 2.25rem; padding-left: .35rem; }
+.nutrition-reference__basis span { color: var(--color-ink-soft); font-size: .68rem; }
+.nutrition-reference__basis p { margin-top: .55rem; font-family: var(--font-display); font-size: .9rem; line-height: 1.7; }
+.nutrition-reference__note { width: 82%; margin-top: 2rem; padding: 1rem .85rem; border: 1px solid rgb(169 141 86 / 28%); border-radius: .8rem; background: rgb(255 252 245 / 34%); color: var(--color-ink-soft); font-size: .72rem; line-height: 1.65; }
+.nutrition-page__action { position: absolute; z-index: 2; right: calc(var(--motion-safe-right) + var(--space-5)); bottom: calc(var(--motion-safe-bottom) + 1rem); left: calc(var(--motion-safe-left) + var(--space-5)); }
+.nutrition-page__action button { display: flex; width: 100%; min-height: 3.55rem; align-items: center; justify-content: center; padding: .6rem 1.25rem; border: 0; border-radius: 2rem; background: var(--color-green-deep); box-shadow: var(--shadow-float); color: var(--color-surface); font-family: var(--font-display); font-size: 1rem; }
+.nutrition-page__action button span { margin-inline: auto; }
+.nutrition-page__action .app-icon { width: 1rem; }
+.nutrition-page__action button:disabled { opacity: .55; }
+.nutrition-page__error { margin-top: .75rem; color: var(--color-coral); font-size: .75rem; }
+.nutrition-profile { overflow-y: auto; }
+.nutrition-profile form { display: grid; gap: 1rem; margin-top: 1.5rem; padding-bottom: 1rem; }
+.nutrition-profile label, .nutrition-profile fieldset { min-width: 0; border: 0; color: var(--color-ink-soft); font-size: .7rem; }
+.nutrition-profile fieldset > div { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; margin-top: .35rem; }
+.nutrition-profile fieldset button { min-height: 2.55rem; border: 1px solid var(--color-gold-soft); border-radius: 1.5rem; background: rgb(255 252 245 / 72%); color: var(--color-green-deep); }
+.nutrition-profile fieldset button[aria-pressed='true'] { background: var(--color-green-deep); color: var(--color-surface); }
+.nutrition-profile__activity { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
+.nutrition-profile__activity legend { grid-column: 1 / -1; }
+.nutrition-profile .nutrition-page__action { position: sticky; right: auto; bottom: 0; left: auto; padding-top: .7rem; background: linear-gradient(transparent, var(--color-surface) 28%); }
+@media (max-height: 44rem) { .nutrition-reference .nutrition-page__action { position: relative; inset: auto; margin-top: 1.5rem; } }

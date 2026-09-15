@@ -4,6 +4,7 @@ import { migrateDatabase } from '../migrations'
 
 const DATABASE_NAME = 'motion'
 let databasePromise: Promise<Database> | undefined
+let initialSchemaVersion: number | undefined
 
 class NativeDriver implements SqlDriver {
   constructor(private readonly connection: SQLiteDBConnection) {}
@@ -32,6 +33,7 @@ async function openDatabase(): Promise<Database> {
   try {
     if (!(await connection.isDBOpen()).result) await connection.open()
     const db = new Database(new NativeDriver(connection))
+    initialSchemaVersion = (await db.query<{ user_version: number }>('PRAGMA user_version;'))[0]?.user_version ?? 0
     await migrateDatabase(db)
     return db
   } catch (error) {
@@ -47,4 +49,9 @@ export function getNativeDatabase(): Promise<Database> {
     throw error
   })
   return databasePromise
+}
+
+export async function getInitialDatabaseVersion(): Promise<number> {
+  await getNativeDatabase()
+  return initialSchemaVersion ?? 0
 }

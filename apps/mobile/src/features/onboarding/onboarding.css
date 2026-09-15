@@ -1,0 +1,61 @@
+.onboarding { position: relative; width: min(100%, 32rem); min-height: 100dvh; margin-inline: auto; overflow: hidden; padding: calc(var(--motion-safe-top) + 1.3rem) var(--space-5) calc(var(--motion-safe-bottom) + 6.6rem); background: var(--color-surface); color: var(--color-green-deep); isolation: isolate; }
+.onboarding::before { position: absolute; z-index: -2; inset: 0; background: url('../../assets/motion-art/motion-paper-texture.png') center / 34rem repeat; content: ''; opacity: .3; }
+.onboarding::after { position: absolute; z-index: -1; top: 1rem; right: -2rem; width: 8rem; height: 8rem; background: url('../../assets/motion-art/motion-crescent.svg') center / contain no-repeat; content: ''; opacity: .38; }
+.onboarding-brand { position: relative; z-index: 2; display: grid; justify-items: center; gap: .05rem; }
+.onboarding-brand strong { font-family: var(--font-display); font-size: 1.9rem; font-weight: 500; letter-spacing: .02em; }
+.onboarding-brand span { color: var(--color-gold); font-family: var(--font-display); font-size: .48rem; letter-spacing: .2em; }
+.onboarding-welcome__copy { position: relative; z-index: 2; margin-top: 2.35rem; }
+.onboarding h1 { color: var(--color-green-deep); font-size: clamp(2rem, 8.8vw, 2.8rem); line-height: 1.22; }
+.onboarding-welcome__copy p { margin-top: 1.25rem; color: var(--color-ink-soft); font-size: .82rem; line-height: 1.75; }
+.onboarding--welcome { width: 100vw; max-width: none; min-height: 100dvh; margin: 0; background: transparent; }
+.onboarding--welcome::after { display: none; }
+.onboarding-welcome__scene { position: absolute; z-index: 0; inset: 0; overflow: hidden; pointer-events: none; }
+.onboarding-welcome__scene img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center bottom; }
+.onboarding-actions, .onboarding-step__action { position: absolute; z-index: 3; right: calc(var(--motion-safe-right) + var(--space-5)); bottom: calc(var(--motion-safe-bottom) + 1rem); left: calc(var(--motion-safe-left) + var(--space-5)); }
+.onboarding-actions { display: grid; gap: .35rem; padding: 0; background: transparent; }
+.onboarding-primary { display: flex; width: 100%; min-height: 3.55rem; align-items: center; justify-content: center; padding: .55rem 1.3rem; border: 0; border-radius: 2rem; background: var(--color-green-deep); box-shadow: var(--shadow-float); color: var(--color-surface); font-family: var(--font-display); font-size: 1rem; }
+.onboarding-primary span { margin-inline: auto; }
+.onboarding-primary .app-icon { width: 1rem; }
+.onboarding-primary:disabled { opacity: .55; }
+.onboarding-skip { min-height: 2rem; border: 0; background: transparent; color: var(--color-ink-soft); font-size: .72rem; }
+.onboarding-progress { display: grid; grid-template-columns: 2.5rem 1fr 2.5rem; align-items: center; }
+.onboarding-progress button { border: 0; background: transparent; color: var(--color-green-deep); font-size: 2rem; text-align: left; }
+.onboarding-progress span { color: var(--color-ink-soft); font-family: var(--font-display); font-size: .72rem; text-align: center; }
+.onboarding-step { padding: 1.35rem .25rem 1rem; }
+.onboarding-kicker { min-height: 2.8rem; color: var(--color-ink-soft); font-size: .73rem; line-height: 1.55; text-align: center; }
+.onboarding-step h1 { margin-top: .5rem; text-align: center; }
+.onboarding-goals { display: grid; gap: .75rem; margin-top: 2.2rem; }
+.onboarding-goals button, .onboarding-activity button { position: relative; display: grid; grid-template-columns: 3.1rem 1fr 1.25rem; gap: .15rem .85rem; align-items: center; min-height: 6.2rem; padding: .8rem 1rem; border: 1px solid var(--color-gold-soft); border-radius: 1.25rem; background: rgb(255 252 245 / 62%); color: var(--color-green-deep); text-align: left; }
+.onboarding-goals button::after, .onboarding-activity button::after { grid-column: 3; grid-row: 1 / span 2; width: 1rem; height: 1rem; border: 1px solid var(--color-gold); border-radius: 50%; content: ''; }
+.onboarding-goals button[aria-pressed='true']::after, .onboarding-activity button[aria-pressed='true']::after { border: .22rem solid var(--color-surface); background: var(--color-green-deep); box-shadow: 0 0 0 1px var(--color-green-deep); }
+.onboarding-goals button > span, .onboarding-activity button > span { grid-row: 1 / span 2; color: var(--color-gold); font-family: var(--font-display); font-size: 2.1rem; text-align: center; }
+.onboarding-goals strong, .onboarding-activity strong { align-self: end; font-family: var(--font-display); font-size: 1rem; }
+.onboarding-goals small, .onboarding-activity small { align-self: start; color: var(--color-ink-soft); font-size: .67rem; line-height: 1.5; }
+.onboarding--goal::before, .onboarding--about::before, .onboarding--activity::before, .onboarding--result::before { background-image: url('../../assets/motion-art/motion-paper-texture.png'), url('../../assets/motion-art/motion-leaves.svg'); background-position: center, left bottom; background-size: 34rem, 13rem; background-repeat: repeat, no-repeat; }
+.onboarding-about { display: grid; gap: .72rem; margin-top: 1rem; }
+.onboarding-about label, .onboarding-about fieldset { min-width: 0; border: 0; color: var(--color-ink-soft); font-size: .7rem; }
+.onboarding-about fieldset div { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; margin-top: .35rem; }
+.onboarding-about fieldset button { min-height: 2.65rem; border: 1px solid var(--color-gold-soft); border-radius: 1.5rem; background: transparent; color: var(--color-green-deep); }
+.onboarding-about fieldset button[aria-pressed='true'] { background: var(--color-green-deep); color: var(--color-surface); }
+.onboarding-activity { display: grid; gap: .55rem; margin-top: 1.3rem; }
+.onboarding-activity button { min-height: 4.7rem; grid-template-columns: 2.5rem 1fr 1.25rem; padding-block: .55rem; }
+.onboarding-activity button > span { font-size: 1.45rem; }
+.onboarding-error { margin-top: .7rem; color: var(--color-coral); font-size: .74rem; text-align: center; }
+.onboarding-result { text-align: center; }
+.onboarding-result__numbers { position: relative; display: grid; justify-items: center; gap: .2rem; margin-top: 1.5rem; padding: 1.6rem 1rem; }
+.onboarding-result__numbers::before { position: absolute; inset: -.35rem -1rem; border: 1px solid rgb(169 141 86 / 38%); border-radius: 50%; content: ''; transform: rotate(-7deg); }
+.onboarding-result__numbers::after { position: absolute; top: 34%; left: -.35rem; width: 2.3rem; height: 2.3rem; background: url('../../assets/motion-art/motion-stars.svg') center / contain no-repeat; content: ''; opacity: .65; }
+.onboarding-result__numbers strong { position: relative; font-family: var(--font-display); font-size: clamp(2.5rem, 11vw, 3.35rem); font-weight: 500; line-height: 1.05; }
+.onboarding-result__numbers span { color: var(--color-ink-soft); font-size: .72rem; line-height: 1.45; }
+.onboarding-result__numbers i { width: 62%; margin-block: .65rem; border-top: 1px solid var(--color-gold-soft); }
+.onboarding-result__basis { margin-top: .9rem; color: var(--color-ink-soft); font-family: var(--font-display); font-size: .74rem; }
+.onboarding-result__empty { position: relative; display: grid; justify-items: center; gap: .55rem; margin-top: 1.8rem; padding: 2rem 1rem; }
+.onboarding-result__empty::before { position: absolute; width: 90%; height: 9rem; border: 1px solid rgb(169 141 86 / 38%); border-radius: 50%; content: ''; }
+.onboarding-result__empty > span { color: var(--color-gold); font-size: .72rem; }
+.onboarding-result__empty strong { position: relative; font-family: var(--font-display); font-size: 1.7rem; }
+.onboarding-result__empty p, .onboarding-result__message { color: var(--color-ink-soft); font-size: .75rem; line-height: 1.7; }
+.onboarding-result__message { position: relative; z-index: 1; margin-top: 1.35rem; }
+.onboarding-result__scene { position: absolute; z-index: -1; right: 0; bottom: 4.5rem; left: 0; height: 13rem; overflow: hidden; opacity: .52; pointer-events: none; }
+.onboarding-result__scene > span { position: absolute; right: 12%; bottom: 15%; width: 6rem; height: 6rem; border-radius: 50%; background: #dfbb72; opacity: .72; }
+.onboarding-result__scene img { position: absolute; right: -18%; bottom: 0; width: 140%; max-width: none; }
+@media (max-height: 45rem) { .onboarding { overflow-y: auto; } .onboarding-actions, .onboarding-step__action { position: relative; inset: auto; margin-top: 1.2rem; } .onboarding-welcome__scene { opacity: .58; } .onboarding-result__scene { opacity: .22; } }

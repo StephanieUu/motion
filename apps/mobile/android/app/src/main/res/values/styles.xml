@@ -15,8 +15,11 @@
         <item name="android:background">@color/motionCanvas</item>
         <item name="android:colorAccent">@color/colorAccent</item>
         <item name="android:forceDarkAllowed">false</item>
-        <item name="android:navigationBarColor">@color/motionCanvas</item>
-        <item name="android:statusBarColor">@color/motionCanvas</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
+        <item name="android:enforceStatusBarContrast">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
         <item name="android:windowLightNavigationBar">true</item>
         <item name="android:windowLightStatusBar">true</item>
     </style>
@@ -25,7 +28,12 @@
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
         <item name="android:forceDarkAllowed">false</item>
-        <item name="android:navigationBarColor">@color/motionCanvas</item>
-        <item name="android:statusBarColor">@color/motionCanvas</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
+        <item name="android:enforceStatusBarContrast">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 </resources>

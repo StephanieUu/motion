@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest'
 import { App } from './App'
 import { uiCopy } from '../locales'
 import type { TrainingLibrary } from '../features/training/trainingLibrary'
+import type { NutritionService } from '../features/food/nutritionService'
+import { OnboardingService, type OnboardingDisposition } from '../features/onboarding/onboardingService'
 
 const emptyLibrary: TrainingLibrary = {
   load: async () => ({ workouts: [], activityTypes: [], pendingTodayWorkoutId: null }),
@@ -19,6 +21,18 @@ const emptyLibrary: TrainingLibrary = {
 }
 
 describe('application shell', () => {
+  it('shows onboarding for a genuinely fresh install and skip enters the normal app', async () => {
+    let disposition: OnboardingDisposition | null = null
+    const onboarding = new OnboardingService({} as NutritionService,
+      { get: async () => disposition, set: async (value) => { disposition = value } }, 0)
+    const user = userEvent.setup()
+    render(<MemoryRouter><App trainingLibrary={emptyLibrary} onboardingService={onboarding} /></MemoryRouter>)
+    expect(await screen.findByRole('heading', { name: /欢迎来到/ })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '以后再说' }))
+    expect(screen.getByRole('heading', { name: uiCopy.navigation.today })).toBeVisible()
+    expect(disposition).toBe('SKIPPED')
+  })
+
   it('shows Today and the five primary destinations', async () => {
     render(<MemoryRouter><App trainingLibrary={emptyLibrary} /></MemoryRouter>)
     expect(screen.getByRole('heading', { name: uiCopy.navigation.today })).toBeVisible()
@@ -33,7 +47,7 @@ describe('application shell', () => {
     const user = userEvent.setup()
     render(<MemoryRouter><App trainingLibrary={emptyLibrary} /></MemoryRouter>)
     await user.click(screen.getByRole('link', { name: uiCopy.navigation.food }))
-    expect(screen.getByRole('heading', { name: uiCopy.placeholders.food.title })).toBeVisible()
+    expect(screen.getByRole('heading', { name: uiCopy.navigation.food })).toBeVisible()
     await user.click(screen.getByRole('link', { name: uiCopy.navigation.training }))
     expect(await screen.findByRole('heading', { name: uiCopy.training.title })).toBeVisible()
     expect(screen.getByRole('link', { name: uiCopy.plan.title })).toBeVisible()

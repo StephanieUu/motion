@@ -6,6 +6,10 @@
 }
 
 html {
+  --motion-safe-top: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px));
+  --motion-safe-right: max(env(safe-area-inset-right, 0px), var(--safe-area-inset-right, 0px));
+  --motion-safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px));
+  --motion-safe-left: max(env(safe-area-inset-left, 0px), var(--safe-area-inset-left, 0px));
   min-width: 320px;
   min-height: 100%;
   background: var(--color-canvas);
@@ -69,9 +73,9 @@ h2 {
   z-index: 1;
   min-height: 100dvh;
   padding:
-    calc(env(safe-area-inset-top, 0px) + var(--space-6))
+    calc(var(--motion-safe-top) + var(--space-6))
     var(--space-5)
-    calc(env(safe-area-inset-bottom, 0px) + 9.5rem);
+    calc(var(--motion-safe-bottom) + 9.5rem);
 }
 
 .skip-link {
@@ -482,7 +486,7 @@ h2 {
   position: fixed;
   z-index: 21;
   right: max(var(--space-5), calc((100vw - 32rem) / 2 + var(--space-5)));
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 5.8rem);
+  bottom: calc(var(--motion-safe-bottom) + 5.8rem);
   display: flex;
   min-height: 2.8rem;
   align-items: center;
@@ -519,9 +523,9 @@ h2 {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   width: min(100%, 32rem);
-  min-height: calc(4.9rem + env(safe-area-inset-bottom, 0px));
+  min-height: calc(4.9rem + var(--motion-safe-bottom));
   margin-inline: auto;
-  padding: 0.6rem var(--space-3) env(safe-area-inset-bottom, 0px);
+  padding: 0.6rem var(--space-3) var(--motion-safe-bottom);
   border-top: 1px solid var(--color-gold-soft);
   background: var(--color-surface);
   box-shadow: 0 -0.4rem 1.3rem rgb(31 46 41 / 4%);
@@ -582,7 +586,7 @@ h2 {
   position: relative;
   width: min(100%, 30rem);
   margin-inline: auto;
-  padding: var(--space-8) var(--space-6) calc(var(--space-6) + env(safe-area-inset-bottom, 0px));
+  padding: var(--space-8) var(--space-6) calc(var(--space-6) + var(--motion-safe-bottom));
   border: 1px solid var(--color-gold-soft);
   border-radius: 1.4rem 1.4rem 0.4rem 0.4rem;
   background: var(--color-surface);
@@ -636,7 +640,7 @@ h2 {
 .choice-field__trigger:disabled { opacity: .55; }
 .choice-field__chevron { width: .55rem; height: .55rem; flex: 0 0 auto; border-right: 1.5px solid var(--color-gold); border-bottom: 1.5px solid var(--color-gold); transform: rotate(45deg) translateY(-.2rem); }
 .choice-sheet__backdrop { position: fixed; z-index: 80; inset: 0; display: grid; align-items: end; background: rgb(31 46 41 / 34%); }
-.choice-sheet { display: grid; width: min(100%, 32rem); max-height: min(76dvh, 40rem); margin-inline: auto; padding: var(--space-6) var(--space-5) calc(var(--space-5) + env(safe-area-inset-bottom, 0px)); border: 1px solid var(--color-gold-soft); border-radius: 1.1rem 1.1rem 0 0; background: var(--color-canvas); box-shadow: 0 -.4rem 1.6rem rgb(31 46 41 / 8%); }
+.choice-sheet { display: grid; width: min(100%, 32rem); max-height: min(76dvh, 40rem); margin-inline: auto; padding: var(--space-6) var(--space-5) calc(var(--space-5) + var(--motion-safe-bottom)); border: 1px solid var(--color-gold-soft); border-radius: 1.1rem 1.1rem 0 0; background: var(--color-canvas); box-shadow: 0 -.4rem 1.6rem rgb(31 46 41 / 8%); }
 .choice-sheet::before { width: 2.4rem; height: .2rem; justify-self: center; margin-top: -.85rem; margin-bottom: var(--space-5); border-radius: 1rem; background: var(--color-line); content: ''; }
 .choice-sheet__header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding-bottom: var(--space-3); border-bottom: 1px solid var(--color-gold-art); }
 .choice-sheet__header h2 { font-size: 1.3rem; }

@@ -144,4 +144,14 @@
 .today-execution button:focus-visible, .today-execution input:focus-visible, .today-execution__links a:focus-visible, .workout-card__source:focus-visible, .today-recommendation button:focus-visible, .today-recommendation input:focus-visible { outline: 2px solid var(--color-coral); outline-offset: 3px; }
 .mobile-shell:has(.today-screen) .coach-entry { top: var(--space-3); right: var(--space-3); bottom: auto; width: 2.5rem; min-height: 2.5rem; justify-content: center; padding: .4rem; border-radius: 50%; background: rgb(255 252 245 / 88%); box-shadow: none; }
 .mobile-shell:has(.today-screen) .coach-entry span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.today-nutrition { position: relative; display: grid; min-height: 10.5rem; align-content: center; gap: .55rem; overflow: hidden; padding: 1.15rem 1.1rem 1.2rem; border-block: 1px solid var(--color-gold-soft); background: radial-gradient(circle at 92% 22%, rgb(213 179 105 / 13%), transparent 36%), rgb(255 252 245 / 40%); isolation: isolate; }
+.today-nutrition::before { position: absolute; z-index: -1; right: -2.2rem; bottom: -3.2rem; width: 10rem; height: 10rem; background: url('../../assets/motion-art/motion-leaves.svg') right bottom / contain no-repeat; content: ''; opacity: .16; pointer-events: none; }
+.today-nutrition::after { position: absolute; z-index: -1; top: 2.5rem; right: .8rem; width: 5rem; height: 5rem; border: 1px solid rgb(169 141 86 / 25%); border-radius: 50%; content: ''; }
+.today-nutrition > header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.today-nutrition a { color: var(--color-green-deep); font-size: .76rem; text-decoration: none; }
+.today-nutrition__intake { color: var(--color-green-deep); font-family: var(--font-display); font-size: clamp(2rem, 9vw, 2.75rem); font-weight: 550; line-height: 1.05; font-variant-numeric: lining-nums tabular-nums; }
+.today-nutrition__facts { display: flex; flex-wrap: wrap; gap: .2rem 1rem; }
+.today-nutrition p { color: var(--color-ink-soft); font-size: .74rem; line-height: 1.4; }
+.today-nutrition__state { color: var(--color-green-deep) !important; font-weight: 650; }
+.today-nutrition__partial { color: var(--color-coral) !important; }
 @media (max-width: 350px) { .today-feature__art img { width: 27rem; left: 52%; } .today-recommendation .today-recommendation__entry { font-size: .8rem; } }

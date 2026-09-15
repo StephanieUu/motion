@@ -1,0 +1,131 @@
+.food-screen {
+  --food-gutter: var(--space-5);
+  position: relative;
+  width: calc(100% + 2 * var(--food-gutter));
+  max-width: 32rem;
+  margin-inline: calc(-1 * var(--food-gutter));
+  padding: 0 var(--food-gutter) var(--space-8);
+  color: var(--color-green-deep);
+}
+.food-header { position: relative; min-height: 7.2rem; padding: .15rem .2rem 0; }
+.food-header::before { position: absolute; top: .4rem; right: 5.1rem; width: 3.1rem; height: 3.1rem; background: url('../../assets/motion-art/motion-stars.svg') center / contain no-repeat; content: ''; opacity: .68; pointer-events: none; }
+.food-header__top { display: flex; align-items: center; justify-content: space-between; padding-right: 2.8rem; color: var(--color-green-deep); font-size: .73rem; }
+.food-header__moon { display: block; width: 2.2rem; height: 2.2rem; background: url('../../assets/motion-art/motion-crescent.svg') center / contain no-repeat; transform: rotate(-20deg); }
+.food-header__title { margin-top: .95rem; }
+.food-header h1 { color: var(--color-green-deep); font-size: clamp(2.6rem, 12vw, 3.55rem); line-height: 1.05; }
+
+.food-status { position: relative; display: grid; grid-template-columns: minmax(0, 1.13fr) minmax(0, .87fr); min-height: 12.4rem; align-items: center; margin-top: .15rem; padding: .7rem .2rem .35rem; isolation: isolate; }
+.food-status::before { position: absolute; z-index: -1; top: -1.7rem; left: -2.3rem; width: 10rem; height: 14rem; background: url('../../assets/motion-art/motion-leaves.svg') left center / contain no-repeat; content: ''; opacity: .46; pointer-events: none; }
+.food-status__art { position: absolute; z-index: -1; inset: -1.5rem -.2rem .75rem; overflow: hidden; pointer-events: none; }
+.food-status__art::before { position: absolute; top: 11%; left: 14%; width: 75%; height: 72%; border: 1px solid rgb(169 141 86 / 38%); border-radius: 50%; content: ''; transform: rotate(16deg); }
+.food-status__art::after { position: absolute; right: -.25rem; bottom: 1rem; width: 3rem; height: 3rem; background: url('../../assets/motion-art/motion-stars.svg') center / contain no-repeat; content: ''; opacity: .7; }
+.food-status__intake { display: grid; align-content: center; justify-items: center; min-width: 0; padding: .2rem .5rem .5rem 1.15rem; text-align: center; }
+.food-status__intake strong { max-width: 100%; color: var(--color-green-deep); font-family: var(--font-display); font-size: clamp(2.65rem, 11vw, 3.7rem); font-weight: 650; line-height: 1.02; font-variant-numeric: lining-nums tabular-nums; white-space: nowrap; }
+.food-status__intake > span { margin-top: .2rem; color: var(--color-ink); font-family: var(--font-display); font-size: .82rem; }
+.food-status__intake small { margin-top: .2rem; color: var(--color-ink-soft); font-size: .72rem; }
+.food-status__detail { display: grid; align-content: center; gap: .2rem; min-width: 0; padding: .5rem .2rem .5rem .7rem; border-left: 1px solid rgb(169 141 86 / 35%); }
+.food-status__detail > span { color: var(--color-ink-soft); font-size: .67rem; }
+.food-status__detail > strong { margin-bottom: .3rem; color: var(--color-green-deep); font-family: var(--font-display); font-size: clamp(.75rem, 3.2vw, .94rem); font-weight: 650; line-height: 1.25; overflow-wrap: anywhere; }
+.food-status__detail strong small { display: block; color: var(--color-ink-soft); font-family: var(--font-sans); font-size: .63rem; font-weight: 400; }
+.food-status__detail > .food-status__no-target { margin: 0; font-size: 1.65rem; font-weight: 400; }
+.food-status__note { grid-column: 1 / -1; min-height: 2rem; padding: .2rem 0 .2rem 4.4rem; color: var(--color-ink-soft); font-size: .72rem; }
+.food-status__note p + p { margin-top: .2rem; }
+.food-status__note p:first-child::before { margin-right: .45rem; color: var(--color-gold-art); content: '✧'; }
+.food-log-action { display: flex; width: 100%; min-height: 3.65rem; align-items: center; justify-content: space-between; gap: var(--space-3); margin-top: .75rem; padding: .35rem var(--space-6); border: 0; border-radius: 3rem; background: var(--color-green-deep); box-shadow: var(--shadow-float); color: var(--color-surface); }
+.food-log-action > span { font-size: 1.7rem; font-weight: 300; line-height: 1; }
+.food-log-action strong { margin-right: auto; font-family: var(--font-display); font-size: 1.08rem; font-weight: 600; }
+.food-log-action .app-icon { width: 1.1rem; }
+.food-error { padding: .6rem; border-left: 2px solid var(--color-coral); color: var(--color-coral); font-size: .8rem; }
+.food-notice { margin-top: .5rem; color: var(--color-green-deep); font-size: .76rem; }
+
+.food-meals { margin-top: var(--space-8); padding-inline: .15rem; }
+.food-meals > h2 { color: var(--color-green-deep); font-size: 1.45rem; line-height: 1.25; }
+.food-meals__timeline { position: relative; display: grid; gap: .25rem; margin-top: var(--space-5); }
+.food-meals__timeline::before { position: absolute; top: .35rem; bottom: 2.2rem; left: .55rem; width: 1px; background: rgb(169 141 86 / 48%); content: ''; }
+.food-meal { position: relative; display: grid; grid-template-columns: 1.35rem 3.35rem minmax(0, 1fr); gap: .35rem; min-height: 5rem; align-items: start; padding-bottom: .6rem; }
+.food-meal__number { z-index: 1; display: grid; width: 1.2rem; min-height: 1.35rem; place-items: center; background: var(--color-canvas); color: var(--color-coral); font-family: var(--font-display); font-size: .72rem; }
+.food-meal__seal { display: block; width: 3.05rem; height: 3.05rem; border: 1px solid var(--color-gold-soft); border-radius: 50%; background: var(--color-surface) url('../../assets/motion-art/motion-sun.svg') center / 2.3rem no-repeat; box-shadow: 0 .15rem .4rem rgb(46 66 53 / 5%); }
+.food-meal__seal[data-meal='LUNCH'] { background-image: url('../../assets/motion-art/motion-lily.svg'); background-size: 2.55rem; }
+.food-meal__seal[data-meal='DINNER'] { background-image: url('../../assets/motion-art/motion-crescent.svg'); background-size: 1.55rem; }
+.food-meal__seal[data-meal='SNACK'] { background-image: url('../../assets/motion-art/motion-stars.svg'); background-size: 2.3rem; }
+.food-meal__body { min-width: 0; padding: .15rem 0; }
+.food-meal__body h3, .food-meal--other h3 { display: inline; margin-right: .45rem; color: var(--color-ink); font-family: var(--font-display); font-size: .96rem; }
+.food-meal__record { position: relative; min-width: 0; margin-top: -.95rem; padding: 0 1.5rem .35rem 0; }
+.food-meal__record + .food-meal__record { margin-top: .45rem; padding-top: .35rem; border-top: 1px solid rgb(169 141 86 / 18%); }
+.food-meal__record-top { display: flex; min-height: 1.3rem; align-items: center; justify-content: space-between; padding-left: 2.3rem; }
+.food-meal__record-top time { color: var(--color-ink-soft); font-size: .66rem; }
+.food-meal__record-top button { position: absolute; top: -.15rem; right: 0; min-width: 1.8rem; min-height: 1.8rem; padding: 0; border: 0; background: transparent; color: var(--color-green-deep); font-size: 1.15rem; letter-spacing: -.12em; }
+.food-meal__name, .food-meal__nutrition { color: var(--color-ink-soft); font-size: .72rem; line-height: 1.4; overflow-wrap: anywhere; }
+.food-meal__name { margin: .15rem 0; }
+.food-meal__nutrition { margin: .18rem 0 0; }
+.food-meal__empty { display: flex; align-items: center; gap: .55rem; margin-top: .3rem; padding: .15rem 0; border: 0; background: transparent; color: var(--color-ink-soft); font-size: .73rem; text-align: left; }
+.food-meal__empty span { color: var(--color-coral); font-size: 1rem; }
+.food-meal__details { margin: .55rem -.9rem .3rem 0; padding: .6rem .75rem; border-left: 1px solid var(--color-gold-art); background: rgb(255 252 245 / 65%); }
+.food-meal--other { display: block; min-height: 0; margin-left: 1.7rem; padding: .4rem 0 .5rem 3.6rem; border-left: 1px solid var(--color-gold-soft); }
+.food-meal__entries { margin: 0; padding: 0; list-style: none; }
+.food-entry { display: grid; gap: .3rem; padding: .35rem 0 .55rem; list-style: none; }
+.food-entry > div:first-child { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem; }
+.food-entry strong { color: var(--color-ink); font-size: .78rem; font-weight: 650; overflow-wrap: anywhere; }
+.food-entry span, .food-entry p { color: var(--color-ink-soft); font-size: .69rem; }
+.food-entry > button, .food-entry__actions button, .food-template-save button, .food-text-button, .food-tools__templates button, .food-tools__confirm button { width: fit-content; padding: .25rem 0; border: 0; background: transparent; color: var(--color-green-deep); font-size: .73rem; font-weight: 700; }
+.food-entry__editor { display: grid; gap: .45rem; }
+.food-entry__editor label, .food-setup label { display: grid; gap: .35rem; color: var(--color-ink-soft); font-size: .76rem; }
+.food-entry__editor input, .food-template-save input, .food-setup input, .food-setup select { width: 100%; min-width: 0; min-height: 2.7rem; padding: .55rem .7rem; border: 1px solid var(--color-gold-soft); border-radius: .4rem; background: var(--color-surface); color: var(--color-ink); font: inherit; }
+.food-entry__actions { display: flex; gap: var(--space-4); }
+.food-entry__actions button:last-child { color: var(--color-coral); }
+.food-template-save { display: flex; align-items: center; gap: var(--space-2); padding: .3rem 0; }
+
+.food-tools { display: grid; gap: .65rem; margin-top: var(--space-5); padding: .85rem 1rem .75rem; border: 1px solid var(--color-gold-soft); border-radius: 1.3rem; background: rgb(255 252 245 / 57%); }
+.food-tools .eyebrow { color: var(--color-ink-soft); font-size: .72rem; letter-spacing: .01em; }
+.food-tools__row { display: grid; grid-template-columns: 1fr 1fr; gap: .35rem; }
+.food-tools__row > button { display: flex; min-width: 0; min-height: 3.15rem; align-items: center; gap: .4rem; padding: .2rem .1rem; border: 0; background: transparent; color: var(--color-ink); text-align: left; font-size: .75rem; }
+.food-tools__row > button + button { padding-left: .45rem; border-left: 1px solid var(--color-gold-soft); }
+.food-tools__row button > span:nth-child(2) { min-width: 0; white-space: nowrap; }
+.food-tools__row small, .food-setup__toggle small { display: block; margin-top: .15rem; color: var(--color-ink-soft); font-size: .64rem; font-weight: 400; }
+.food-tools__icon { display: grid; width: 2rem; height: 2rem; flex: 0 0 auto; place-items: center; border: 1px solid var(--color-gold-soft); border-radius: 50%; color: var(--color-coral); font-size: 1.15rem; }
+.food-tools__row .app-icon { width: .8rem; margin-left: auto; }
+.food-tools__templates, .food-tools__confirm { padding: .5rem 0 .25rem; border-top: 1px solid var(--color-gold-soft); }
+.food-tools__templates p, .food-tools__confirm p { color: var(--color-ink-soft); font-size: .73rem; line-height: 1.45; }
+.food-tools__templates ul { margin: 0; padding: 0; list-style: none; }
+.food-tools__templates li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: .35rem 0; font-size: .78rem; }
+.food-tools__confirm button + button { margin-left: var(--space-4); color: var(--color-ink-soft); }
+.food-setup { margin-top: .7rem; padding: .1rem .9rem; border: 1px solid var(--color-gold-soft); border-radius: 1.2rem; background: rgb(255 252 245 / 44%); }
+.food-setup__toggle { display: flex; width: 100%; min-height: 3.8rem; align-items: center; justify-content: space-between; gap: var(--space-3); padding: .55rem .1rem; border: 0; background: transparent; color: var(--color-ink); font-size: .78rem; text-align: left; }
+.food-setup__toggle .app-icon { width: .95rem; }
+
+.food-compose { position: fixed; z-index: 40; inset: 0; width: min(100%, 32rem); margin-inline: auto; overflow-y: auto; overscroll-behavior: contain; background: var(--color-surface); }
+.food-compose__sheet { position: relative; min-height: 100dvh; overflow: hidden; padding: calc(var(--motion-safe-top) + var(--space-5)) var(--space-5) calc(var(--motion-safe-bottom) + var(--space-8)); isolation: isolate; }
+.food-compose__sheet::before { position: absolute; z-index: -1; top: -3rem; right: -4rem; width: 18rem; height: 13rem; border: 1px solid rgb(169 141 86 / 45%); border-radius: 50%; content: ''; transform: rotate(35deg); pointer-events: none; }
+.food-compose__sheet::after { position: absolute; z-index: -1; top: 3rem; right: 2rem; width: 3.5rem; height: 3.5rem; background: url('../../assets/motion-art/motion-stars.svg') center / contain no-repeat; content: ''; opacity: .62; pointer-events: none; }
+.food-compose__close { position: relative; z-index: 2; display: grid; width: 2.5rem; height: 2.5rem; place-items: center; margin-left: -.5rem; padding: 0; border: 0; background: transparent; color: var(--color-ink); font-size: 1.55rem; font-weight: 300; }
+.food-compose header { position: relative; z-index: 1; margin-top: var(--space-8); }
+.food-compose header h2 { color: var(--color-green-deep); font-size: clamp(2.35rem, 11vw, 3.1rem); line-height: 1.05; }
+.food-compose header p { margin-top: .35rem; color: var(--color-ink-soft); font-size: .78rem; }
+.food-compose__moon { position: absolute; right: 1.5rem; top: -2.2rem; width: 4.3rem; height: 4.3rem; background: url('../../assets/motion-art/motion-crescent.svg') center / contain no-repeat; opacity: .78; }
+.food-compose__form { position: relative; z-index: 1; display: grid; margin-top: var(--space-8); }
+.food-compose__types { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .15rem; padding: .2rem; border: 1px solid var(--color-gold-soft); border-radius: 1.6rem; background: rgb(255 252 245 / 75%); }
+.food-compose__types button { display: grid; min-width: 0; min-height: 4.35rem; align-content: center; justify-items: center; gap: .15rem; padding: .3rem .1rem; border: 0; border-radius: 1.35rem; background: transparent; color: var(--color-ink); font-size: .76rem; }
+.food-compose__types button + button { border-left: 1px solid rgb(169 141 86 / 20%); }
+.food-compose__types button[aria-pressed='true'] { border-left: 0; background: var(--color-green-deep); color: var(--color-surface); box-shadow: var(--shadow-soft); }
+.food-compose__types button > span { color: var(--color-gold); font-size: 1.05rem; line-height: 1; }
+.food-compose__types button[aria-pressed='true'] > span { color: var(--color-surface); }
+.food-compose__input-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.food-compose textarea { width: 100%; min-height: 10rem; margin-top: var(--space-6); padding: var(--space-4); border: 1px solid var(--color-gold-soft); border-radius: .85rem; background: rgb(255 252 245 / 88%); box-shadow: 0 .15rem .5rem rgb(46 66 53 / 4%); color: var(--color-ink); font: inherit; font-size: .92rem; line-height: 1.65; resize: vertical; }
+.food-compose textarea::placeholder { color: #818780; opacity: 1; }
+.food-compose__examples { margin-top: var(--space-3); color: var(--color-ink-soft); font-size: .7rem; line-height: 1.65; text-align: center; }
+.food-compose__save { display: flex; width: 100%; min-height: 3.55rem; align-items: center; justify-content: center; gap: var(--space-3); margin-top: var(--space-8); padding: .6rem var(--space-5); border: 0; border-radius: 3rem; background: var(--color-green-deep); box-shadow: var(--shadow-float); color: var(--color-surface); font-family: var(--font-display); font-size: 1.05rem; }
+.food-compose__save .app-icon { position: absolute; right: var(--space-8); width: 1rem; }
+.food-compose__save:disabled { opacity: .55; }
+.food-compose__art { position: absolute; z-index: -1; right: -5rem; bottom: -1.6rem; display: block; width: min(36rem, 130%); max-width: none; height: auto; opacity: .38; pointer-events: none; }
+.mobile-shell:has(.food-screen) .coach-entry { top: var(--space-3); right: var(--space-3); bottom: auto; width: 2.5rem; min-height: 2.5rem; justify-content: center; padding: .4rem; border-radius: 50%; background: rgb(255 252 245 / 88%); box-shadow: none; }
+.mobile-shell:has(.food-screen) .coach-entry span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+@media (max-width: 23rem) {
+  .food-screen { --food-gutter: var(--space-4); }
+  .food-status__intake { padding-left: .55rem; }
+  .food-status__detail { padding-left: .45rem; }
+  .food-status__detail > strong { font-size: .75rem; }
+  .food-tools { padding-inline: .7rem; }
+  .food-tools__icon { width: 1.7rem; height: 1.7rem; }
+  .food-compose__sheet { padding-inline: var(--space-4); }
+}

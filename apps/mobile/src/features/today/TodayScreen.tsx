@@ -15,6 +15,7 @@ import { TodayPlanPath } from './TodayPlanPath'
 import { deriveCurrentPlanProgress, deriveTodayActivities, deriveTodayProvenance,
   formatActualMinutes } from './todayModel'
 import { MotivationPanel } from '../motivation/MotivationPanel'
+import { TodayNutrition } from './TodayNutrition'
 import type { MotivationRepository } from '../../db/repositories/MotivationRepository'
 import './today.css'
 
@@ -385,6 +386,7 @@ export function TodayScreen({ execution: supplied, recommendations: suppliedReco
       }) }} /> : null}
     {error ? <p className="today-execution__error" role="alert">{error}</p> : null}
     {notice ? <p className="today-execution__notice" role="status">{notice}</p> : null}
+    {!miniFocus && !miniComplete ? <TodayNutrition /> : null}
     {!session && !miniComplete && data && recommendations ? <section className="today-recommendation" aria-label={uiCopy.recommendation.sectionTitle}>
       <img className="today-recommendation__art" src={interludeArt} alt="" aria-hidden="true" />
       {recommendationFlow !== 'IDLE' ? <span className="eyebrow">{uiCopy.recommendation.sectionTitle}</span> : null}

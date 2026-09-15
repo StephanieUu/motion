@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SharedWorkoutPayload } from '@motion/integrations'
 import type { LibraryWorkout } from '../db/repositories/WorkoutRepository'
 import type { TrainingLibrary } from '../features/training/trainingLibrary'
+import type { NutritionService } from '../features/food/nutritionService'
+import { OnboardingService } from '../features/onboarding/onboardingService'
 import { App } from './App'
 
 const shareBridge = vi.hoisted(() => ({
@@ -58,6 +60,8 @@ function library() {
   }
   return { service, imports, workouts }
 }
+const skippedOnboarding = () => new OnboardingService({} as NutritionService,
+  { get: async () => 'SKIPPED', set: async () => undefined }, 6)
 
 describe('M3 Android share routing', () => {
   it('drains a cold-start share and a repeated delivery resolves to one workout', async () => {
@@ -65,7 +69,7 @@ describe('M3 Android share routing', () => {
     const item = { eventId: 'cold', text: 'https://b23.tv/abc', subject: null }
     shareBridge.pending = [item]
     const { service, imports, workouts } = library()
-    render(<MemoryRouter><App trainingLibrary={service} /></MemoryRouter>)
+    render(<MemoryRouter><App trainingLibrary={service} onboardingService={skippedOnboarding()} /></MemoryRouter>)
     expect(await screen.findByText('信息待补充，已存入训练库')).toBeVisible()
     expect(imports).toEqual(['cold'])
     expect(shareBridge.acknowledged).toEqual(['cold'])
@@ -77,8 +81,9 @@ describe('M3 Android share routing', () => {
   it('routes a warm share from another tab into Training', async () => {
     vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true)
     const { service, imports } = library()
-    render(<MemoryRouter initialEntries={['/food']}><App trainingLibrary={service} /></MemoryRouter>)
-    expect(screen.getByRole('heading', { name: '饮食记录' })).toBeVisible()
+    render(<MemoryRouter initialEntries={['/food']}><App trainingLibrary={service}
+      onboardingService={skippedOnboarding()} /></MemoryRouter>)
+    expect(await screen.findByRole('heading', { name: '饮食' })).toBeVisible()
     await waitFor(() => expect(shareBridge.listener).not.toBeNull())
     act(() => shareBridge.listener?.({ eventId: 'warm', text: 'https://b23.tv/warm', subject: '晨间训练' }))
     expect(await screen.findByText('信息待补充，已存入训练库')).toBeVisible()
