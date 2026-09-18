@@ -105,11 +105,17 @@ export function App({ trainingLibrary, onboardingService }: AppProps) {
     onExit={() => setOnboarding('HIDE')} />
 
   if (location.pathname.startsWith('/food/reference') || location.pathname.startsWith('/food/profile') ||
-    location.pathname.startsWith('/food/plan')) return <Routes>
+    location.pathname.startsWith('/food/plan') || location.pathname.startsWith('/body/')) return <Routes>
     <Route path="/food/reference" element={<NutritionReferenceScreen />} />
     <Route path="/food/profile" element={<NutritionProfileScreen />} />
     <Route path="/food/plan" element={<NutritionPlanManagementScreen />} />
     <Route path="/food/plan/select" element={<NutritionPlanSelectionScreen />} />
+    <Route path="/body/entry" element={<BodyScreen view="entry" />} />
+    <Route path="/body/trends" element={<BodyScreen view="trends" />} />
+    <Route path="/body/history" element={<BodyScreen view="history" />} />
+    <Route path="/body/import" element={<BodyScreen view="import" />} />
+    <Route path="/body/health" element={<BodyScreen view="health" />} />
+    <Route path="/body/summary" element={<BodyScreen view="summary" />} />
   </Routes>
 
   return <AppShell>

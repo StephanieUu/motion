@@ -5,6 +5,7 @@ export type WorkoutPreference = 'LOVE' | 'LIKE' | 'NEUTRAL' | 'DISLIKE'
 export type CompletionStatus = 'COMPLETE' | 'MOSTLY_COMPLETE' | 'PARTIAL'
 export type PlanEquivalence = 'FULL' | 'PARTIAL' | 'NONE'
 export * from './nutrition'
+export * from './body'
 
 export interface WorkoutContent {
   id: string

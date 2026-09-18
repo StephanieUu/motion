@@ -8,8 +8,8 @@ export interface NutritionProfile extends SqlRow {
   activity_level: ActivityLevel | null
 }
 export interface BodyMeasurementRecord extends SqlRow {
-  id: string; measured_at: string; local_date: string; source_type: string; weight_kg: number
-  user_verified: number; created_at: string
+  id: string; measured_at: string; local_date: string; source_type: string; weight_kg: number | null
+  user_verified: number; created_at: string; updated_at: string
 }
 export interface MealRecord extends SqlRow {
   id: string; local_date: string; meal_type: MealType; logged_at: string; note: string | null
@@ -65,18 +65,20 @@ export class NutritionRepository {
   }
   async addManualWeight(weightKg: number, localDate: string, tx: SqlAccess = this.db): Promise<BodyMeasurementRecord> {
     if (!Number.isFinite(weightKg) || weightKg <= 0) throw new Error('Weight must be positive')
-    const record: BodyMeasurementRecord = { id: crypto.randomUUID(), measured_at: new Date().toISOString(),
+    const now = new Date().toISOString()
+    const record: BodyMeasurementRecord = { id: crypto.randomUUID(), measured_at: now,
       local_date: localDate, source_type: 'MANUAL', weight_kg: weightKg, user_verified: 1,
-      created_at: new Date().toISOString() }
-    await tx.run(`INSERT INTO body_measurements (id,measured_at,local_date,source_type,weight_kg,user_verified,created_at)
-      VALUES (?,?,?,?,?,?,?)`, [record.id, record.measured_at, record.local_date, record.source_type,
-      record.weight_kg, record.user_verified, record.created_at])
+      created_at: now, updated_at: now }
+    await tx.run(`INSERT INTO body_measurements
+      (id,measured_at,local_date,source_type,weight_kg,user_verified,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?)`, [record.id, record.measured_at, record.local_date, record.source_type,
+      record.weight_kg, record.user_verified, record.created_at, record.updated_at])
     return record
   }
-  async latestWeightOnOrBefore(localDate: string, tx: SqlAccess = this.db): Promise<BodyMeasurementRecord | null> {
-    return (await tx.query<BodyMeasurementRecord>(`SELECT * FROM body_measurements
-      WHERE local_date<=? AND user_verified=1 AND weight_kg>0
-      ORDER BY local_date DESC,measured_at DESC,created_at DESC LIMIT 1`, [localDate]))[0] ?? null
+  async latestWeightOnOrBefore(localDate: string, tx: SqlAccess = this.db): Promise<(BodyMeasurementRecord & { weight_kg: number }) | null> {
+    return (await tx.query<BodyMeasurementRecord & { weight_kg: number }>(`SELECT * FROM body_measurements
+      WHERE local_date<=? AND weight_kg IS NOT NULL AND weight_kg>0
+      ORDER BY local_date DESC,measured_at DESC,user_verified DESC,created_at DESC LIMIT 1`, [localDate]))[0] ?? null
   }
   async getTarget(localDate: string, tx: SqlAccess = this.db): Promise<DailyNutritionTargetRecord | null> {
     return (await tx.query<DailyNutritionTargetRecord>(

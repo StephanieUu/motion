@@ -16,6 +16,8 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(MotionSharePlugin.class);
+        registerPlugin(MotionHealthConnectPlugin.class);
+        registerPlugin(MotionBodyOcrPlugin.class);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         super.onCreate(savedInstanceState);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);

@@ -23,7 +23,7 @@ class NodeDriver implements SqlDriver {
   async rollback(): Promise<void> { this.sqlite.exec('ROLLBACK') }
 }
 const opened: DatabaseSync[] = []
-async function ready(version = 8) {
+async function ready(version = 9) {
   const sqlite = new DatabaseSync(':memory:')
   opened.push(sqlite)
   const db = new Database(new NodeDriver(sqlite))
@@ -38,9 +38,9 @@ const entry = (name: string, calories: number | null, protein: number | null): F
 })
 
 describe('M7/M8 schema and repository', () => {
-  it('creates version 8 from fresh and enables foreign keys', async () => {
+  it('creates the current schema from fresh and enables foreign keys', async () => {
     const { db } = await ready()
-    expect((await db.query<{ user_version: number }>('PRAGMA user_version'))[0]?.user_version).toBe(8)
+    expect((await db.query<{ user_version: number }>('PRAGMA user_version'))[0]?.user_version).toBe(9)
     expect((await db.query<{ foreign_keys: number }>('PRAGMA foreign_keys'))[0]?.foreign_keys).toBe(1)
     expect(await db.query('SELECT * FROM meals')).toEqual([])
     expect(await db.query('SELECT * FROM app_preferences')).toEqual([])
@@ -49,7 +49,7 @@ describe('M7/M8 schema and repository', () => {
     const { db } = await ready(6)
     await db.run("INSERT INTO user_profile (singleton_key,id,goal_type,created_at) VALUES (1,'u','MAINTENANCE','2026-09-14')")
     const before = await db.query('SELECT * FROM user_profile')
-    expect(await migrateDatabase(db)).toBe(8)
+    expect(await migrateDatabase(db)).toBe(9)
     expect(await db.query('SELECT id,goal_type,activity_level FROM user_profile')).toEqual([
       { id: 'u', goal_type: 'MAINTENANCE', activity_level: null },
     ])
@@ -72,7 +72,9 @@ describe('M7/M8 schema and repository', () => {
     const { db } = await ready()
     await expect(db.run(`INSERT INTO food_entries (id,meal_id,name,estimation_method,confidence_level,created_at)
       VALUES ('e','missing','x','MANUAL','MEDIUM','now')`)).rejects.toThrow()
-    await expect(db.run("INSERT INTO body_measurements VALUES ('w','now','2026-09-15','MANUAL',-1,1,'now')"))
+    await expect(db.run(`INSERT INTO body_measurements
+      (id,measured_at,local_date,source_type,weight_kg,user_verified,created_at,updated_at)
+      VALUES ('w','now','2026-09-15','MANUAL',-1,1,'now','now')`))
       .rejects.toThrow()
     await expect(db.run("INSERT INTO meals VALUES ('m','2026-09-15','INVALID','now',NULL)"))
       .rejects.toThrow()
@@ -302,7 +304,7 @@ describe('M8 nutrition plans', () => {
       protein_min_g,protein_max_g,carbs_target_g,fat_target_g,day_type,calculation_version,rationale_json,created_at)
       VALUES ('t','2026-09-14',1400,1650,72,96,180,50,'NORMAL','NASEM_2023_M7_V1',
       '{"kept":true,"source":"m7"}','2026-09-14T12:00:00.000Z')`)
-    expect(await migrateDatabase(db)).toBe(8)
+    expect(await migrateDatabase(db, migrations.slice(0, 8))).toBe(8)
     expect(await db.query('SELECT id,note FROM meals')).toEqual([{ id: 'm', note: 'kept' }])
     expect(await db.query('SELECT id,name FROM food_entries')).toEqual([{ id: 'e', name: '米饭' }])
     expect(await db.query(`SELECT * FROM daily_nutrition_targets`)).toEqual([{ id: 't',
