@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MotivationRepository, MotivationState } from '../../db/repositories/MotivationRepository'
 import { rescueNotifications } from '../../platform/notifications/rescueNotifications'
@@ -28,13 +29,17 @@ function settingsRepository() {
   return repository
 }
 
+function renderMe(repository: MotivationRepository) {
+  return render(<MemoryRouter><MeScreen motivation={repository} /></MemoryRouter>)
+}
+
 beforeEach(() => { vi.clearAllMocks() })
 
 describe('Me reminder settings', () => {
   it('moves persisted reminder controls to Me and synchronizes the existing adapter', async () => {
     const user = userEvent.setup()
     const repository = settingsRepository()
-    render(<MeScreen motivation={repository} />)
+    renderMe(repository)
     expect(await screen.findByRole('heading', { name: uiCopy.me.remindersTitle })).toBeVisible()
     expect(screen.getByLabelText(uiCopy.motivation.rescueTime)).toHaveValue('18:30')
     fireEvent.change(screen.getByLabelText(uiCopy.motivation.rescueTime), { target: { value: '19:15' } })
@@ -50,7 +55,7 @@ describe('Me reminder settings', () => {
     vi.mocked(rescueNotifications.requestPermission).mockResolvedValueOnce(false)
     const user = userEvent.setup()
     const repository = settingsRepository()
-    render(<MeScreen motivation={repository} />)
+    renderMe(repository)
     await screen.findByRole('heading', { name: uiCopy.me.remindersTitle })
     await user.click(screen.getByRole('checkbox', { name: uiCopy.motivation.notifications }))
     await user.click(screen.getByRole('button', { name: uiCopy.motivation.saveTime }))
@@ -64,11 +69,21 @@ describe('Me reminder settings', () => {
     const user = userEvent.setup()
     const repository = settingsRepository()
     await repository.configureRescue(18 * 60 + 30, true)
-    render(<MeScreen motivation={repository} />)
+    renderMe(repository)
     await screen.findByRole('heading', { name: uiCopy.me.remindersTitle })
     await user.click(screen.getByRole('button', { name: uiCopy.motivation.saveTime }))
     await waitFor(() => expect(repository.configureRescue).toHaveBeenLastCalledWith(18 * 60 + 30, false))
     expect(screen.getByRole('checkbox', { name: uiCopy.motivation.notifications })).not.toBeChecked()
     expect(await screen.findByText(uiCopy.motivation.permissionDenied)).toBeVisible()
+  })
+
+  it('opens AI settings through client-side routing', async () => {
+    const user = userEvent.setup()
+    render(<MemoryRouter initialEntries={['/me']}><Routes>
+      <Route path="/me" element={<MeScreen motivation={settingsRepository()} />} />
+      <Route path="/me/ai" element={<h1>AI 与隐私</h1>} />
+    </Routes></MemoryRouter>)
+    await user.click(await screen.findByRole('link', { name: /AI 与隐私/ }))
+    expect(await screen.findByRole('heading', { name: 'AI 与隐私' })).toBeVisible()
   })
 })

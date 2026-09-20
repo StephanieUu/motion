@@ -178,6 +178,30 @@ export class NutritionRepository {
       return mealId
     })
   }
+  async addMealWithEntries(localDate: string, mealType: MealType, entries: FoodEntryInput[], note: string | null = null): Promise<string> {
+    if (!entries.length) throw new Error('At least one food entry is required')
+    return this.db.transaction(async (tx) => {
+      const mealId = crypto.randomUUID()
+      await tx.run('INSERT INTO meals (id,local_date,meal_type,logged_at,note) VALUES (?,?,?,?,?)',
+        [mealId, localDate, mealType, new Date().toISOString(), note])
+      for (const entry of entries) await this.insertEntry(mealId, entry, tx)
+      return mealId
+    })
+  }
+  async addAiMealWithEntries(localDate: string, mealType: MealType, entries: FoodEntryInput[],
+    confirmationId: string, note: string | null = null): Promise<string> {
+    if (!entries.length) throw new Error('At least one food entry is required')
+    if (!/^ai-meal-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(confirmationId))
+      throw new Error('Invalid AI meal confirmation')
+    return this.db.transaction(async (tx) => {
+      const existing = (await tx.query<{ id: string }>('SELECT id FROM meals WHERE id=?', [confirmationId]))[0]
+      if (existing) return existing.id
+      await tx.run('INSERT INTO meals (id,local_date,meal_type,logged_at,note) VALUES (?,?,?,?,?)',
+        [confirmationId, localDate, mealType, new Date().toISOString(), note])
+      for (const entry of entries) await this.insertEntry(confirmationId, entry, tx)
+      return confirmationId
+    })
+  }
   async insertEntry(mealId: string, entry: FoodEntryInput, tx: SqlAccess): Promise<string> {
     if (!entry.name.trim()) throw new Error('Food name is required')
     const id = crypto.randomUUID()

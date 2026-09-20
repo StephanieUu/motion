@@ -4,6 +4,7 @@ const config: CapacitorConfig = {
   appId: 'app.motion',
   appName: 'Motion',
   webDir: 'dist',
+  loggingBehavior: 'none',
   android: {
     backgroundColor: '#f7f3e9',
   },

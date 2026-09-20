@@ -12,7 +12,7 @@ export const zhCN = {
   coach: {
     entry: 'Coach',
     eyebrow: '',
-    title: 'Coach 暂未开放',
+    title: 'Coach',
     description: '',
     close: '关闭',
   },

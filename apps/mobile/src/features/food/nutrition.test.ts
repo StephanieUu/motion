@@ -23,7 +23,7 @@ class NodeDriver implements SqlDriver {
   async rollback(): Promise<void> { this.sqlite.exec('ROLLBACK') }
 }
 const opened: DatabaseSync[] = []
-async function ready(version = 9) {
+async function ready(version = 10) {
   const sqlite = new DatabaseSync(':memory:')
   opened.push(sqlite)
   const db = new Database(new NodeDriver(sqlite))
@@ -40,7 +40,7 @@ const entry = (name: string, calories: number | null, protein: number | null): F
 describe('M7/M8 schema and repository', () => {
   it('creates the current schema from fresh and enables foreign keys', async () => {
     const { db } = await ready()
-    expect((await db.query<{ user_version: number }>('PRAGMA user_version'))[0]?.user_version).toBe(9)
+    expect((await db.query<{ user_version: number }>('PRAGMA user_version'))[0]?.user_version).toBe(10)
     expect((await db.query<{ foreign_keys: number }>('PRAGMA foreign_keys'))[0]?.foreign_keys).toBe(1)
     expect(await db.query('SELECT * FROM meals')).toEqual([])
     expect(await db.query('SELECT * FROM app_preferences')).toEqual([])
@@ -49,7 +49,7 @@ describe('M7/M8 schema and repository', () => {
     const { db } = await ready(6)
     await db.run("INSERT INTO user_profile (singleton_key,id,goal_type,created_at) VALUES (1,'u','MAINTENANCE','2026-09-14')")
     const before = await db.query('SELECT * FROM user_profile')
-    expect(await migrateDatabase(db)).toBe(9)
+    expect(await migrateDatabase(db)).toBe(10)
     expect(await db.query('SELECT id,goal_type,activity_level FROM user_profile')).toEqual([
       { id: 'u', goal_type: 'MAINTENANCE', activity_level: null },
     ])

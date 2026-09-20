@@ -1,9 +1,12 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { BodyScreen } from './BodyScreen'
 import type { BodyService } from './bodyService'
+
+const { openAiService } = vi.hoisted(() => ({ openAiService: vi.fn() }))
+vi.mock('../ai/aiRuntime', () => ({ openAiService }))
 
 const service = { overview: vi.fn(async () => ({ snapshot:{weightKg:{value:65.8,measurementId:'w',measuredAt:'now',sourceType:'MANUAL'},
   bodyFatPercent:{value:21.8,measurementId:'f',measuredAt:'now',sourceType:'MANUAL'}},
@@ -18,6 +21,8 @@ const service = { overview: vi.fn(async () => ({ snapshot:{weightKg:{value:65.8,
 } as unknown as BodyService
 
 describe('M9 Body presentation', () => {
+  beforeEach(() => { openAiService.mockClear() })
+
   it('renders the approved factual Body overview hierarchy and access routes', async () => {
     render(<MemoryRouter><BodyScreen suppliedService={service}/></MemoryRouter>)
     expect(await screen.findByText('65.8')).toBeInTheDocument()
@@ -26,6 +31,7 @@ describe('M9 Body presentation', () => {
     expect(screen.getByRole('button',{name:'＋ 记录身体数据'})).toBeInTheDocument()
     expect(screen.getByRole('button',{name:'导入薄荷截图'})).toBeInTheDocument()
     expect(screen.getByRole('button',{name:'连接 Health Connect'})).toBeInTheDocument()
+    expect(openAiService).not.toHaveBeenCalled()
   })
 
   it('keeps core body fields visible and advanced metrics in the existing disclosure', async () => {
@@ -52,6 +58,17 @@ describe('M9 Body presentation', () => {
     expect(screen.getByRole('button', { name: '确认并保存' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: '确认并保存' }))
     expect(confirmScreenshot).not.toHaveBeenCalled()
+  })
+
+  it('keeps successful local OCR local and does not open an AI provider', async () => {
+    const user = userEvent.setup(), localOcrService = { ...service,
+      recognizeScreenshot: vi.fn(async () => ({ importId:'local',rawText:'体重 64.35 公斤',
+        values:{ weightKg:64.35 } })),
+    } as unknown as BodyService
+    render(<MemoryRouter><BodyScreen view="import" suppliedService={localOcrService}/></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: '选择薄荷截图' }))
+    expect(await screen.findByDisplayValue('64.35')).toBeInTheDocument()
+    expect(openAiService).not.toHaveBeenCalled()
   })
 
   it('opens measurement history from the root tabs and keeps overview and trends reachable', async () => {

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { FoodScreen } from './FoodScreen'
 import type { NutritionService } from './nutritionService'
+import { MealPhotoAiError, type AiService } from '../ai/aiService'
 
 describe('M7 Food entry presentation', () => {
   it('keeps logging available without target setup and passes the selected meal to the same entry service', async () => {
@@ -57,5 +58,23 @@ describe('M7 Food entry presentation', () => {
     render(<MemoryRouter><FoodScreen suppliedService={current} /></MemoryRouter>)
     expect(await screen.findByRole('button', { name: /今日 · 宽松日/ })).toBeVisible()
     expect(screen.getByText('1,400–1,650 kcal')).toBeVisible()
+  })
+
+  it('shows a sanitized Meal Photo provider failure in the active entry flow', async () => {
+    const current = { daily: vi.fn(async () => ({ localDate: '2026-09-15', meals: [], target: null,
+      summary: { caloriesKnown: 0, proteinKnown: 0, unknownCalories: 0, unknownProtein: 0, entryCount: 0 },
+      remaining: { calorieState: 'NO_TARGET', caloriesRemainingMin: null, caloriesRemainingMax: null,
+        proteinGapG: null, caloriesPartial: false, proteinPartial: false } })),
+    templates: vi.fn(async () => []) } as unknown as NutritionService
+    const ai = { prepareMealPhoto: vi.fn(async () => { throw new MealPhotoAiError({ provider: 'GEMINI',
+      category: 'PROVIDER', httpStatus: 503, width: 960, height: 1280, byteSize: 120_000,
+      mimeType: 'image/jpeg' }) }) } as unknown as AiService
+    const user = userEvent.setup()
+    render(<MemoryRouter><FoodScreen suppliedService={current} suppliedAiService={ai} /></MemoryRouter>)
+    await user.click(await screen.findByRole('button', { name: '记一餐' }))
+    await user.click(screen.getByRole('button', { name: '选择照片估算' }))
+    expect(await screen.findByText('照片估算未完成：PROVIDER（HTTP 503）。你仍可手动记录。')).toBeVisible()
+    expect(ai.prepareMealPhoto).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: '选择照片估算' })).toBeEnabled()
   })
 })

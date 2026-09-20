@@ -11,6 +11,9 @@ import type { ExecutionSnapshot, TrainingExecution } from './trainingExecution'
 import type { TodayRecommendations, RecommendationView } from '../today/todayRecommendations'
 import type { MotivationRepository, MotivationState } from '../../db/repositories/MotivationRepository'
 
+const { openAiService } = vi.hoisted(() => ({ openAiService: vi.fn() }))
+vi.mock('../ai/aiRuntime', () => ({ openAiService }))
+
 const workout: LibraryWorkout = {
   id: 'workout', contentKind: 'FOLLOW_ALONG', title: '拉伸训练', description: null,
   sourceType: 'BILIBILI', sourceUrl: 'https://example.com', durationMinutes: 15,
@@ -68,6 +71,7 @@ describe('M5 Today recommendations', () => {
     await user.click(screen.getByRole('button', { name: uiCopy.recommendation.accept }))
     await waitFor(() => expect(accept).toHaveBeenCalledTimes(1))
     expect(start).not.toHaveBeenCalled()
+    expect(openAiService).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: uiCopy.recommendation.selected })).toBeDisabled()
   })
 

@@ -21,7 +21,7 @@ class NodeDriver implements SqlDriver {
 }
 const opened: DatabaseSync[] = []
 function open() { const sqlite = new DatabaseSync(':memory:'); opened.push(sqlite); return { sqlite, db: new Database(new NodeDriver(sqlite)) } }
-async function ready(version = 9) { const result = open(); await migrateDatabase(result.db, migrations.slice(0, version)); return result }
+async function ready(version = 10) { const result = open(); await migrateDatabase(result.db, migrations.slice(0, version)); return result }
 afterEach(() => opened.splice(0).forEach((sqlite) => sqlite.close()))
 
 describe('M9 body migration', () => {
@@ -47,7 +47,7 @@ describe('M9 body migration', () => {
     expect(await db.query("SELECT * FROM daily_nutrition_targets WHERE id='target'")).toEqual(targetBefore)
     expect(await db.query("SELECT id,title FROM workout_contents WHERE id='kept-workout'")).toEqual([{id:'kept-workout',title:'kept'}])
     expect(await db.query("SELECT id,status FROM nutrition_plan_runs WHERE id='kept-run'")).toEqual([{id:'kept-run',status:'ACTIVE'}])
-    expect((await db.query<{ user_version:number }>('PRAGMA user_version'))[0]?.user_version).toBe(9)
+    expect((await db.query<{ user_version:number }>('PRAGMA user_version'))[0]?.user_version).toBe(10)
     expect(await db.query('PRAGMA foreign_key_check')).toEqual([])
   })
 

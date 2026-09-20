@@ -18,6 +18,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(MotionSharePlugin.class);
         registerPlugin(MotionHealthConnectPlugin.class);
         registerPlugin(MotionBodyOcrPlugin.class);
+        registerPlugin(MotionAiPlugin.class);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         super.onCreate(savedInstanceState);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);

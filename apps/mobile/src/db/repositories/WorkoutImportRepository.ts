@@ -99,4 +99,16 @@ export class WorkoutImportRepository {
       'SELECT workout_content_id FROM today_pending_selections WHERE local_date=?', [localDate]))[0]
     return row?.workout_content_id ?? null
   }
+
+  async saveAiAnalysis(workoutContentId: string, provider: 'GEMINI' | 'DEEPSEEK',
+    extracted: Record<string, unknown>, confidence: number): Promise<string> {
+    const workout = (await this.db.query<{ id: string }>('SELECT id FROM workout_contents WHERE id=?', [workoutContentId]))[0]
+    if (!workout) throw new Error('Workout not found')
+    const id = crypto.randomUUID(), fingerprint = `ai:${workoutContentId}:${crypto.randomUUID()}`
+    await this.db.run(`INSERT INTO content_analyses
+      (id,workout_content_id,fingerprint,analysis_version,method,provider,confidence,extracted_data_json,analyzed_at)
+      VALUES (?,?,?,?,?,?,?,?,?)`, [id, workoutContentId, fingerprint, 1, provider, provider,
+      Math.max(0, Math.min(1, confidence)), JSON.stringify(extracted), new Date().toISOString()])
+    return id
+  }
 }

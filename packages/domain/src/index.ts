@@ -6,6 +6,7 @@ export type CompletionStatus = 'COMPLETE' | 'MOSTLY_COMPLETE' | 'PARTIAL'
 export type PlanEquivalence = 'FULL' | 'PARTIAL' | 'NONE'
 export * from './nutrition'
 export * from './body'
+export * from './ai'
 
 export interface WorkoutContent {
   id: string
@@ -30,6 +31,10 @@ export interface PlanDayInput {
   dayIndex: number
   title?: string
   isRestDay?: boolean
+  originalLabel?: string | null
+  expectedDurationMinutes?: number | null
+  expectedIntensity?: string | null
+  notes?: string | null
   items?: Array<{ workoutContentId: string; role: 'PRIMARY' | 'SUPPLEMENTAL' }>
 }
 

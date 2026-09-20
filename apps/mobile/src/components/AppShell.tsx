@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react'
-import { NavLink } from 'react-router-dom'
+import type { ReactNode } from 'react'
+import { NavLink, useNavigate } from 'react-router-dom'
 
 import { AppIcon, type IconName } from './AppIcon'
 import { uiCopy } from '../locales'
@@ -22,7 +22,7 @@ const tabs: ReadonlyArray<{
 ]
 
 export function AppShell({ children }: AppShellProps) {
-  const [isCoachOpen, setIsCoachOpen] = useState(false)
+  const navigate = useNavigate()
 
   return (
     <div className="app-viewport">
@@ -38,9 +38,7 @@ export function AppShell({ children }: AppShellProps) {
         <button
           className="coach-entry"
           type="button"
-          aria-haspopup="dialog"
-          aria-expanded={isCoachOpen}
-          onClick={() => setIsCoachOpen(true)}
+          onClick={() => navigate('/coach')}
         >
           <AppIcon name="spark" />
           <span>{uiCopy.coach.entry}</span>
@@ -63,34 +61,6 @@ export function AppShell({ children }: AppShellProps) {
         </nav>
       </div>
 
-      {isCoachOpen ? (
-        <div
-          className="dialog-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.currentTarget === event.target) {
-              setIsCoachOpen(false)
-            }
-          }}
-        >
-          <section
-            className="coach-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="coach-dialog-title"
-          >
-            <div className="coach-dialog__mark" aria-hidden="true">
-              <AppIcon name="spark" />
-            </div>
-            <span className="eyebrow">{uiCopy.coach.eyebrow}</span>
-            <h2 id="coach-dialog-title">{uiCopy.coach.title}</h2>
-            <p>{uiCopy.coach.description}</p>
-            <button type="button" onClick={() => setIsCoachOpen(false)}>
-              {uiCopy.coach.close}
-            </button>
-          </section>
-        </div>
-      ) : null}
     </div>
   )
 }

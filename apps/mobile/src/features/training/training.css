@@ -589,6 +589,9 @@
 .training-library__actions { padding-top: var(--space-4); border-top: 1px solid var(--color-gold-soft); }
 .training-library__actions button, .training-library__confirm button, .training-library__today-selected { border-radius: .45rem; }
 .training-library__confirm { border-radius: .45rem; }
+.training-library__ai-draft { display: grid; grid-template-columns: 1fr auto auto; gap: var(--space-2); align-items: center; padding: var(--space-3); border: 1px solid var(--color-gold-soft); border-radius: .45rem; background: rgb(255 252 245 / 52%); }
+.training-library__ai-draft strong, .training-library__ai-draft p { grid-column: 1 / -1; }
+.training-library__ai-draft p { color: var(--color-ink-soft); font-size: .72rem; line-height: 1.45; }
 
 .mobile-shell:has(.training-library) .coach-entry { right: max(var(--space-4), calc((100vw - 32rem) / 2 + var(--space-4))); bottom: calc(var(--motion-safe-bottom) + 5.7rem); background: rgb(255 252 245 / 90%); }
 

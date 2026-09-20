@@ -7,6 +7,8 @@ import { AppIcon } from '../../components/AppIcon'
 import interludeArt from '../../assets/motion-art/today-interlude.png'
 import type { FoodEntryRecord, MealTemplateRecord, MealWithEntries } from '../../db/repositories/NutritionRepository'
 import { openNutritionService, type NutritionService } from './nutritionService'
+import { openAiService } from '../ai/aiRuntime'
+import { MealPhotoAiError, type AiService } from '../ai/aiService'
 import type { DailyNutrition } from './nutritionPresentation'
 import { compactPlanLabel } from './nutritionPlanPresentation'
 import './food.css'
@@ -93,7 +95,7 @@ function EntryEditor({ entry, onSave, onDelete }: { entry: FoodEntryRecord;
   </li>
 }
 
-export function FoodScreen({ suppliedService }: { suppliedService?: NutritionService }) {
+export function FoodScreen({ suppliedService, suppliedAiService }: { suppliedService?: NutritionService; suppliedAiService?: AiService }) {
   const navigate = useNavigate()
   const [service, setService] = useState<NutritionService | null>(suppliedService ?? null)
   const [day, setDay] = useState<DailyNutrition | null>(null)
@@ -102,6 +104,7 @@ export function FoodScreen({ suppliedService }: { suppliedService?: NutritionSer
   const [text, setText] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [photoStatus, setPhotoStatus] = useState('')
   const [busy, setBusy] = useState(false)
   const [templateMeal, setTemplateMeal] = useState<string | null>(null)
   const [templateName, setTemplateName] = useState('')
@@ -138,6 +141,45 @@ export function FoodScreen({ suppliedService }: { suppliedService?: NutritionSer
     event.preventDefault()
     const saved = await act(async (current) => { await current.logText(text, mealType); setText(''); setNotice('已记录。') })
     if (saved) setQuickOpen(false)
+  }
+  async function logAi(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!service || busy) return
+    setBusy(true); setError(''); setNotice('')
+    try {
+      const ai = suppliedAiService ?? await openAiService()
+      const result = await ai.prepareMealText(text, mealType)
+      if (result.local) {
+        setText(''); setNotice('已记录。'); await refresh(service); setQuickOpen(false)
+      } else {
+        setQuickOpen(false); navigate('/food/ai-preview', { state: { draft: result.draft } })
+      }
+    } catch (cause) {
+      logger.error('Food AI text preparation failed', cause)
+      setBusy(false)
+      await log(event)
+      return
+    } finally { setBusy(false) }
+  }
+  async function estimatePhoto() {
+    if (busy) return
+    setBusy(true); setError(''); setPhotoStatus('正在处理照片…')
+    try {
+      const ai = suppliedAiService ?? await openAiService()
+      const draft = await ai.prepareMealPhoto(mealType)
+      if (draft) { setQuickOpen(false); navigate('/food/ai-preview', { state: { draft } }) }
+    } catch (cause) {
+      if (cause instanceof MealPhotoAiError) {
+        const { provider, category, httpStatus, width, height, byteSize, mimeType } = cause.diagnostic
+        logger.error('Food AI photo preparation failed', new Error(category), {
+          provider, category, httpStatus, width, height, byteSize, mimeType,
+        })
+        setError(`照片估算未完成：${category}${httpStatus ? `（HTTP ${httpStatus}）` : ''}。你仍可手动记录。`)
+      } else {
+        logger.error('Food AI photo preparation failed', cause)
+        setError('暂时无法完成照片估算，你仍可填写热量和蛋白质。')
+      }
+    } finally { setPhotoStatus(''); setBusy(false) }
   }
   const groups = new Map<MealType, MealWithEntries[]>()
   for (const item of day?.meals ?? []) groups.set(item.meal.meal_type,
@@ -247,7 +289,7 @@ export function FoodScreen({ suppliedService }: { suppliedService?: NutritionSer
         aria-label="关闭记一餐" onClick={() => setQuickOpen(false)}>×</button>
         <header><span className="food-compose__moon" aria-hidden="true" /><h2 id="food-compose-title">记一餐</h2>
           <p>可填写食物，也可直接填写热量和蛋白质。</p></header>
-        <form className="food-compose__form" onSubmit={(event) => void log(event)}>
+        <form className="food-compose__form" onSubmit={(event) => void logAi(event)}>
           <div className="food-compose__types" role="group" aria-label="选择餐次">{mealTypes.map((item) =>
             <button key={item.type} type="button" aria-pressed={mealType === item.type}
               onClick={() => setMealType(item.type)}><span aria-hidden="true">{item.type === 'DINNER' ? '☾' : '✧'}</span>
@@ -257,6 +299,9 @@ export function FoodScreen({ suppliedService }: { suppliedService?: NutritionSer
             placeholder={`${mealPrompts[mealType]}\n也可以直接写：700 kcal`} rows={5} />
           <p className="food-compose__examples">例如：600 kcal · 午饭大约 700 kcal · 午饭 700 kcal 蛋白质 30g</p>
           {error ? <p className="food-error" role="alert">{error}</p> : null}
+          <div className="food-compose__ai-actions"><button type="button" disabled={busy}
+            onClick={() => void estimatePhoto()}>{photoStatus || '选择照片估算'}</button></div>
+          {photoStatus ? <p className="food-notice" role="status">{photoStatus}</p> : null}
           <button className="food-compose__save" type="submit" disabled={busy || !text.trim()}>
             保存记录 <AppIcon name="arrow" /></button>
         </form>

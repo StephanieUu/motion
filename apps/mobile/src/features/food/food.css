@@ -118,8 +118,11 @@
 .food-compose__save { display: flex; width: 100%; min-height: 3.55rem; align-items: center; justify-content: center; gap: var(--space-3); margin-top: var(--space-8); padding: .6rem var(--space-5); border: 0; border-radius: 3rem; background: var(--color-green-deep); box-shadow: var(--shadow-float); color: var(--color-surface); font-family: var(--font-display); font-size: 1.05rem; }
 .food-compose__save .app-icon { position: absolute; right: var(--space-8); width: 1rem; }
 .food-compose__save:disabled { opacity: .55; }
+.food-compose__ai-actions { display: flex; justify-content: center; margin-top: var(--space-4); }
+.food-compose__ai-actions button { min-height: 2.7rem; padding: .45rem 1rem; border: 1px solid var(--color-gold-soft); border-radius: 2rem; background: rgb(255 252 245 / 72%); color: var(--color-green-deep); font: inherit; font-size: .78rem; font-weight: 650; }
+.food-compose__ai-actions button:disabled { opacity: .5; }
 .food-compose__art { position: absolute; z-index: -1; right: -5rem; bottom: -1.6rem; display: block; width: min(36rem, 130%); max-width: none; height: auto; opacity: .38; pointer-events: none; }
-.mobile-shell:has(.food-screen) .coach-entry { top: var(--space-3); right: var(--space-3); bottom: auto; width: 2.5rem; min-height: 2.5rem; justify-content: center; padding: .4rem; border-radius: 50%; background: rgb(255 252 245 / 88%); box-shadow: none; }
+.mobile-shell:has(.food-screen) .coach-entry { top: calc(var(--motion-safe-top) + var(--space-3)); right: var(--space-3); bottom: auto; width: 2.5rem; min-height: 2.5rem; justify-content: center; padding: .4rem; border-radius: 50%; background: rgb(255 252 245 / 88%); box-shadow: none; }
 .mobile-shell:has(.food-screen) .coach-entry span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 @media (max-width: 23rem) {

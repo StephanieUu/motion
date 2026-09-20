@@ -71,8 +71,11 @@ export class TrainingPlanRepository {
       for (const day of input.days) {
         if (day.isRestDay && day.items?.length) throw new Error('Rest day cannot contain workouts')
         const dayId = crypto.randomUUID()
-        await tx.run('INSERT INTO training_plan_days (id,training_plan_id,day_index,title,is_rest_day) VALUES (?,?,?,?,?)',
-          [dayId, id, day.dayIndex, day.title ?? null, day.isRestDay ? 1 : 0])
+        await tx.run(`INSERT INTO training_plan_days
+          (id,training_plan_id,day_index,original_label,title,is_rest_day,expected_duration_minutes,expected_intensity,notes)
+          VALUES (?,?,?,?,?,?,?,?,?)`, [dayId, id, day.dayIndex, day.originalLabel ?? null,
+          day.title ?? null, day.isRestDay ? 1 : 0, day.expectedDurationMinutes ?? null,
+          day.expectedIntensity ?? null, day.notes ?? null])
         for (const [index, item] of (day.items ?? []).entries()) {
           await tx.run('INSERT INTO training_plan_day_items (id,training_plan_day_id,workout_content_id,sort_order,role) VALUES (?,?,?,?,?)',
             [crypto.randomUUID(), dayId, item.workoutContentId, index, item.role])

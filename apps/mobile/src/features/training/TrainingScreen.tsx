@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { App as CapacitorApp } from '@capacitor/app'
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core'
 import { Link, useNavigate } from 'react-router-dom'
-import type { SourceType, WorkoutPreference, WorkoutVisibility } from '@motion/domain'
+import type { SourceType, WorkoutMetadataDraft, WorkoutPreference, WorkoutVisibility } from '@motion/domain'
 import { logger } from '../../app/logger'
 import { ChoiceSelect } from '../../components/ChoiceSelect'
 import trainingArt from '../../assets/motion-art/today-artwork.png'
@@ -14,6 +14,7 @@ import { defaultLibraryFilters, displayWorkoutTitle, filterLibrary, formatDispla
 import { InvalidWorkoutUrlError, openTrainingLibrary, TrainingLibraryUnavailableError,
   type LibrarySnapshot, type TrainingLibrary } from './trainingLibrary'
 import { openTrainingExecution, type TrainingExecution } from './trainingExecution'
+import { openAiService } from '../ai/aiRuntime'
 import './training.css'
 
 interface TrainingScreenProps {
@@ -85,6 +86,7 @@ export function TrainingScreen({ library: suppliedLibrary, execution: suppliedEx
   const [editIntensity, setEditIntensity] = useState('')
   const [confirmRemove, setConfirmRemove] = useState(false)
   const [activeImport, setActiveImport] = useState<WorkoutImportResult | null>(null)
+  const [aiMetadata, setAiMetadata] = useState<{ draft: WorkoutMetadataDraft; provider: 'GEMINI' | 'DEEPSEEK' } | null>(null)
   const handledImportId = useRef<string | null>(null)
   const listScrollY = useRef(0)
 
@@ -216,7 +218,31 @@ export function TrainingScreen({ library: suppliedLibrary, execution: suppliedEx
     setEditActivityTypeId(workout.primaryActivityTypeId ?? '')
     setEditIntensity(workout.estimatedIntensity ?? '')
     setError('')
+    setAiMetadata(null)
     enterSubview('EDIT')
+  }
+
+  async function requestAiMetadata() {
+    if (!selected || saving) return
+    setSaving(true); setError('')
+    try { setAiMetadata(await (await openAiService()).workoutMetadata({ title: editTitle || selected.title,
+      sourceType: selected.sourceType, sourceUrl: editUrl || selected.sourceUrl,
+      knownDurationMinutes: selected.durationMinutes, knownIntensity: selected.estimatedIntensity })) }
+    catch (cause) { logger.error('Workout metadata assist failed', cause); setError('暂时无法生成元数据草稿。') }
+    finally { setSaving(false) }
+  }
+
+  async function applyAiMetadata() {
+    if (!selected || !aiMetadata || saving) return
+    if (!editDuration.trim() && aiMetadata.draft.durationMinutes !== null) {
+      setEditDuration(String(aiMetadata.draft.durationMinutes)); setEditDurationTouched(true)
+    }
+    if (!editIntensity && aiMetadata.draft.estimatedIntensity) setEditIntensity(aiMetadata.draft.estimatedIntensity)
+    setSaving(true)
+    try { await (await openAiService()).confirmWorkoutMetadata(selected.id, aiMetadata.draft, aiMetadata.provider)
+      setNotice('AI 草稿已应用，请检查后保存。'); setAiMetadata(null) }
+    catch (cause) { logger.error('Workout metadata confirmation failed', cause); setError('元数据草稿没有应用。') }
+    finally { setSaving(false) }
   }
 
   async function saveUrl(event: FormEvent<HTMLFormElement>) {
@@ -525,6 +551,13 @@ export function TrainingScreen({ library: suppliedLibrary, execution: suppliedEx
                 { value: '', label: uiCopy.training.unknown },
                 ...Object.entries(uiCopy.training.intensities).map(([value, label]) => ({ value, label })),
               ]} />
+            <button type="button" disabled={saving} onClick={() => void requestAiMetadata()}>AI 补充元数据</button>
+            {aiMetadata ? <div className="training-library__ai-draft"><strong>元数据草稿（确认后应用）</strong>
+              <p>{[aiMetadata.draft.activityType, aiMetadata.draft.estimatedIntensity,
+                aiMetadata.draft.durationMinutes === null ? null : `${aiMetadata.draft.durationMinutes} 分钟`,
+                ...aiMetadata.draft.bodyAreas].filter(Boolean).join(' · ') || '没有可应用的字段'}</p>
+              <button type="button" onClick={() => void applyAiMetadata()}>应用草稿</button>
+              <button type="button" onClick={() => setAiMetadata(null)}>取消</button></div> : null}
             {error ? <p role="alert" className="training-library__error">{error}</p> : null}
             <button type="submit" disabled={saving}>{uiCopy.training.save}</button>
           </form>

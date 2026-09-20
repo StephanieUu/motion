@@ -6,6 +6,7 @@ import { AppIcon } from '../../components/AppIcon'
 import { logger } from '../../app/logger'
 import { openBodyService, type BodyOverview, type BodyService, type OcrDraft } from './bodyService'
 import type { HealthRecordType } from '../../platform/body/bodyNative'
+import { openAiService } from '../ai/aiRuntime'
 import './body.css'
 
 type BodyView = 'home' | 'entry' | 'trends' | 'history' | 'import' | 'health' | 'summary'
@@ -156,10 +157,17 @@ function BodyImport({ service, onBack }: { service: BodyService | null; onBack: 
     await service.confirmScreenshot(draft, { ...values, measuredAt: now.toISOString(), localDate: localDateAtStart(now), confidenceLevel: 'MEDIUM' }); onBack() }
     catch (cause) { setError(cause instanceof Error && cause.message !== 'At least one body metric is required' ? cause.message
       : '没有识别到可保存的身体数据，你可以重新选择截图或手动记录。') } }
+  async function assistWithAi() { if (!draft) return; setError('')
+    try { const values = await (await openAiService()).screenshotAssist(draft.rawText)
+      const next = Object.fromEntries(Object.entries(values).filter(([, value]) => value !== null)
+        .map(([key, value]) => [key, String(value)])); setFields(next)
+      if (!Object.keys(next).length) setError('AI 也没有识别到可保存的身体数据，你可以重新选择截图或手动记录。')
+    } catch { setError('AI 辅助识别暂时无法使用，你可以重新选择截图或手动记录。') } }
   return <main className="body-detail"><Header title="导入薄荷截图" back={onBack} />
     {!draft ? <section className="body-import-empty"><span aria-hidden="true">▧</span><p>选择截图后，将在设备上识别数据。</p>
       <button className="body-primary-action" onClick={() => void choose()}>选择薄荷截图</button></section> : <>
       <section className="body-ocr-preview"><h2>识别结果（可编辑）</h2>{metricInputs.map(([key,label,unit]) => fields[key] === undefined ? null : <label key={key}>{label}<span><input type="number" step="any" value={fields[key]} onChange={(event) => setFields({...fields,[key]:event.target.value})}/><em>{unit}</em></span></label>)}</section>
+      {!hasParsedFields ? <button className="body-link" onClick={() => void assistWithAi()}>使用 AI 辅助识别</button> : null}
       <button className="body-primary-action" disabled={!hasParsedFields} onClick={() => void confirm()}>确认并保存</button><button className="body-link" onClick={() => void choose()}>重新选择截图</button></>}
     {error ? <p role="alert" className="body-error">{error}</p> : null}</main>
 }

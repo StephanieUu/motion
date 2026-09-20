@@ -2,13 +2,15 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import type { PlanDayInput } from '@motion/domain'
+import type { PlanDayInput, TrainingPlanImageDraft } from '@motion/domain'
 import { logger } from '../../app/logger'
 import { ChoiceSelect } from '../../components/ChoiceSelect'
 import celestialFrame from '../../assets/motion-art/motion-celestial-frame.svg'
 import { uiCopy } from '../../locales'
 import { displayWorkoutTitle } from './libraryModel'
 import { openTrainingExecution, type ExecutionSnapshot, type TrainingExecution } from './trainingExecution'
+import { openAiService } from '../ai/aiRuntime'
+import { MotionAi } from '../../platform/ai/aiNative'
 import './trainingPlan.css'
 
 interface DraftDay { isRestDay: boolean; workoutId: string }
@@ -29,6 +31,7 @@ export function TrainingPlanScreen({ execution: supplied }: { execution?: Traini
   const [moveDate, setMoveDate] = useState('')
   const [swapTarget, setSwapTarget] = useState('')
   const [confirmEnd, setConfirmEnd] = useState(false)
+  const [aiDraft, setAiDraft] = useState<TrainingPlanImageDraft | null>(null)
 
   const refresh = useCallback(async (current: TrainingExecution) => {
     setData(await current.load())
@@ -81,6 +84,26 @@ export function TrainingPlanScreen({ execution: supplied }: { execution?: Traini
       await current.createPlan(title, input)
       setCreating(false); setTitle(''); setDays([newDay()])
     })
+  }
+  async function recognizePlanImage() {
+    if (busy) return
+    setBusy(true); setError('')
+    try {
+      const image = await MotionAi.chooseMealImage()
+      const base64 = image.dataUrl.replace(/^data:image\/jpeg;base64,/, '')
+      setAiDraft(await (await openAiService()).trainingPlanImage(base64))
+    } catch (cause) {
+      if (!String(cause).includes('IMAGE_NOT_SELECTED')) {
+        logger.error('Training plan image assist failed', cause); setError('暂时无法识别计划图片。')
+      }
+    } finally { setBusy(false) }
+  }
+  async function confirmAiPlan() {
+    if (!aiDraft || busy) return
+    setBusy(true); setError('')
+    try { await (await openAiService()).confirmTrainingPlanDraft(aiDraft); setAiDraft(null); if (service) await refresh(service) }
+    catch (cause) { logger.error('Training plan AI draft save failed', cause); setError('计划草稿没有保存，请检查后重试。') }
+    finally { setBusy(false) }
   }
 
   if (loading) return <section className="plan-screen" aria-live="polite">{uiCopy.plan.loading}</section>
@@ -155,13 +178,26 @@ export function TrainingPlanScreen({ execution: supplied }: { execution?: Traini
 
     <section className="plan-screen__saved">
       <div className="plan-screen__heading"><h2>{uiCopy.plan.title}</h2>
-        <button type="button" onClick={() => setCreating((value) => !value)}>{uiCopy.plan.create}</button></div>
+        <div><button type="button" disabled={busy} onClick={() => void recognizePlanImage()}>识别计划图片</button>
+          <button type="button" onClick={() => setCreating((value) => !value)}>{uiCopy.plan.create}</button></div></div>
       {data.plans.length ? data.plans.map((plan) => <div className="plan-screen__saved-item" key={plan.id}>
         <strong>{plan.title}</strong><span>{plan.plannedDays}{uiCopy.plan.dayUnit}</span>
         {!active ? <button type="button" disabled={busy} onClick={() => void act((s) => s.startPlan(plan.id))}>
           {uiCopy.plan.start}</button> : null}
       </div>) : <p>{uiCopy.plan.empty}</p>}
     </section>
+
+    {aiDraft ? <section className="plan-screen__ai-draft" aria-labelledby="plan-ai-draft-title">
+      <h2 id="plan-ai-draft-title">AI 计划草稿（可编辑）</h2>
+      <label>计划名称<input value={aiDraft.title ?? ''} onChange={(event) => setAiDraft({ ...aiDraft, title: event.target.value })} /></label>
+      {aiDraft.days.map((day, index) => <div key={day.dayIndex}><strong>第 {day.dayIndex} 天</strong>
+        <label>标题<input value={day.title ?? ''} onChange={(event) => setAiDraft({ ...aiDraft,
+          days: aiDraft.days.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value || null } : item) })} /></label>
+        <label><input type="checkbox" checked={day.isRestDay} onChange={(event) => setAiDraft({ ...aiDraft,
+          days: aiDraft.days.map((item, itemIndex) => itemIndex === index ? { ...item, isRestDay: event.target.checked } : item) })} />休息日</label></div>)}
+      <p>识别结果不会自动启用。确认后仅创建本地计划，仍需由你手动开始。</p>
+      <div><button type="button" disabled={busy} onClick={() => void confirmAiPlan()}>确认创建计划</button>
+        <button type="button" onClick={() => setAiDraft(null)}>取消</button></div></section> : null}
 
     {creating ? <form className="plan-screen__create" onSubmit={(event) => void savePlan(event)}>
       <label>{uiCopy.plan.planName}<input value={title} onChange={(event) => setTitle(event.target.value)} /></label>

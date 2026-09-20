@@ -10,6 +10,9 @@ import { NutritionPlanManagementScreen, NutritionPlanSelectionScreen } from '../
 import { OnboardingFlow } from '../features/onboarding/OnboardingFlow'
 import { openOnboardingService, type OnboardingService } from '../features/onboarding/onboardingService'
 import { MeScreen } from '../features/me/MeScreen'
+import { CoachScreen } from '../features/ai/CoachScreen'
+import { AiSettingsScreen } from '../features/ai/AiSettingsScreen'
+import { MealAiPreviewScreen } from '../features/ai/MealAiPreviewScreen'
 import { TodayScreen } from '../features/today/TodayScreen'
 import { TrainingScreen } from '../features/training/TrainingScreen'
 import { TrainingPlanScreen } from '../features/training/TrainingPlanScreen'
@@ -105,11 +108,14 @@ export function App({ trainingLibrary, onboardingService }: AppProps) {
     onExit={() => setOnboarding('HIDE')} />
 
   if (location.pathname.startsWith('/food/reference') || location.pathname.startsWith('/food/profile') ||
-    location.pathname.startsWith('/food/plan') || location.pathname.startsWith('/body/')) return <Routes>
+    location.pathname.startsWith('/food/plan') || location.pathname.startsWith('/food/ai-preview') ||
+    location.pathname.startsWith('/me/ai') || location.pathname.startsWith('/body/')) return <Routes>
     <Route path="/food/reference" element={<NutritionReferenceScreen />} />
     <Route path="/food/profile" element={<NutritionProfileScreen />} />
     <Route path="/food/plan" element={<NutritionPlanManagementScreen />} />
     <Route path="/food/plan/select" element={<NutritionPlanSelectionScreen />} />
+    <Route path="/food/ai-preview" element={<MealAiPreviewScreen />} />
+    <Route path="/me/ai" element={<AiSettingsScreen />} />
     <Route path="/body/entry" element={<BodyScreen view="entry" />} />
     <Route path="/body/trends" element={<BodyScreen view="trends" />} />
     <Route path="/body/history" element={<BodyScreen view="history" />} />
@@ -127,6 +133,7 @@ export function App({ trainingLibrary, onboardingService }: AppProps) {
         <Route path="/food" element={<FoodScreen />} />
         <Route path="/body" element={<BodyScreen />} />
         <Route path="/me" element={<MeScreen />} />
+        <Route path="/coach" element={<CoachScreen />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AppShell>

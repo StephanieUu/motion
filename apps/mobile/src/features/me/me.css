@@ -14,3 +14,9 @@
 .me-reminders button:disabled { opacity: .55; }
 .me-reminders p { margin: 0; color: var(--color-ink-soft); font-size: .78rem; }
 .me-reminders button:focus-visible, .me-reminders input:focus-visible { outline: 2px solid var(--color-coral); outline-offset: 3px; }
+.me-ai { display: grid; gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--color-gold-art); }
+.me-ai h2 { color: var(--color-green-deep); font-family: var(--font-display); font-size: 1.4rem; }
+.me-ai a { display: flex; width: 100%; min-height: 4rem; align-items: center; justify-content: space-between; gap: var(--space-4); padding: .8rem 1rem; border: 1px solid var(--color-gold-soft); border-radius: 1rem; background: rgb(255 252 245 / 64%); color: var(--color-green-deep); text-align: left; text-decoration: none; }
+.me-ai a span:first-child { display: grid; gap: .18rem; }
+.me-ai a strong { font-size: .9rem; }
+.me-ai a small { color: var(--color-ink-soft); font-size: .7rem; font-weight: 400; }

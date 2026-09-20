@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Capacitor } from '@capacitor/core'
+import { Link } from 'react-router-dom'
 import { MotivationRepository, type MotivationState } from '../../db/repositories/MotivationRepository'
 import { getNativeDatabase } from '../../db/sqlite/nativeDatabase'
 import { rescueNotifications } from '../../platform/notifications/rescueNotifications'
@@ -78,5 +79,8 @@ export function MeScreen({ motivation: supplied }: { motivation?: MotivationRepo
       </form>
       {notice ? <p role="status">{notice}</p> : null}
     </section> : null}
+    <section className="me-ai" aria-labelledby="me-ai-title"><h2 id="me-ai-title">AI</h2>
+      <Link to="/me/ai"><span><strong>AI 与隐私</strong>
+        <small>提供商、预算与共享摘要</small></span><span aria-hidden="true">→</span></Link></section>
   </div>
 }
